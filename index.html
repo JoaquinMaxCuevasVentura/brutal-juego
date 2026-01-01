@@ -1,0 +1,3332 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+    <title>BRUTAL</title>
+
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@200;300;400;500;600&family=Bebas+Neue&display=swap');
+
+        :root {
+            --canon-red: #C41E3A;
+            --canon-yellow: #F4D03F;
+            --canon-gold: #D4A84B;
+            --canon-dark: #0a0a0a;
+            --canon-grey: #1a1a1a;
+            --text-light: #e0e0e0;
+            --text-dim: #555;
+            --focus-color: #F4D03F;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            overflow: hidden;
+            background: #000;
+            font-family: 'Inter', -apple-system, sans-serif;
+            user-select: none;
+            color: var(--text-light);
+        }
+
+        canvas { display: block; }
+
+        /* ═══════════════════════════════════════════
+           UI LAYER - CANON VIEWFINDER STYLE
+           ═══════════════════════════════════════════ */
+
+        #ui-layer {
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            z-index: 10;
+            opacity: 0;
+            transition: opacity 0.5s;
+        }
+
+        #ui-layer.visible { opacity: 1; }
+
+        /* === TOP BAR === */
+        .hud-top {
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 48px;
+            background: linear-gradient(to bottom, rgba(0,0,0,0.7) 0%, transparent 100%);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 28px;
+        }
+
+        .info-cluster {
+            display: flex;
+            gap: 20px;
+            align-items: center;
+        }
+
+        .info-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .info-label {
+            font-size: 9px;
+            font-weight: 500;
+            color: var(--text-dim);
+            letter-spacing: 0.5px;
+        }
+
+        .info-value {
+            font-size: 12px;
+            font-weight: 500;
+            color: #fff;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .info-value.accent { color: var(--canon-yellow); }
+
+        .mode-badge {
+            width: 22px;
+            height: 22px;
+            border: 1.5px solid rgba(255,255,255,0.6);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+            font-weight: 600;
+            color: rgba(255,255,255,0.8);
+        }
+
+        .battery {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .battery-icon {
+            width: 24px;
+            height: 11px;
+            border: 1.5px solid rgba(255,255,255,0.7);
+            padding: 1.5px;
+            position: relative;
+        }
+
+        .battery-icon::after {
+            content: '';
+            position: absolute;
+            right: -3px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 2px;
+            height: 4px;
+            background: rgba(255,255,255,0.7);
+        }
+
+        .battery-fill {
+            height: 100%;
+            background: var(--canon-yellow);
+            transition: width 0.3s, background 0.3s;
+        }
+
+        .battery-fill.warning { background: #FF9500; }
+        .battery-fill.critical {
+            background: #FF3B30;
+            animation: blink 0.5s infinite;
+        }
+
+        .battery-text {
+            font-size: 10px;
+            color: var(--text-dim);
+            font-variant-numeric: tabular-nums;
+            min-width: 28px;
+        }
+
+        /* === VIEWFINDER CENTER === */
+        #viewfinder {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 280px;
+            height: 180px;
+        }
+
+        .crosshair {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+        }
+
+        .crosshair::before,
+        .crosshair::after {
+            content: '';
+            position: absolute;
+            background: rgba(255,255,255,0.35);
+            transition: all 0.2s;
+        }
+
+        .crosshair::before {
+            width: 1px;
+            height: 20px;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+        }
+
+        .crosshair::after {
+            width: 20px;
+            height: 1px;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+        }
+
+        .focus-bracket {
+            position: absolute;
+            width: 32px;
+            height: 32px;
+            border-color: rgba(255,255,255,0.3);
+            border-style: solid;
+            transition: all 0.25s ease-out;
+        }
+
+        .focus-bracket.tl { top: 0; left: 0; border-width: 1.5px 0 0 1.5px; }
+        .focus-bracket.tr { top: 0; right: 0; border-width: 1.5px 1.5px 0 0; }
+        .focus-bracket.bl { bottom: 0; left: 0; border-width: 0 0 1.5px 1.5px; }
+        .focus-bracket.br { bottom: 0; right: 0; border-width: 0 1.5px 1.5px 0; }
+
+        #viewfinder.locked .focus-bracket {
+            border-color: var(--canon-yellow);
+            width: 36px;
+            height: 36px;
+            filter: drop-shadow(0 0 10px var(--canon-yellow));
+        }
+
+        #viewfinder.locked .crosshair::before,
+        #viewfinder.locked .crosshair::after {
+            background: var(--canon-yellow);
+            box-shadow: 0 0 6px var(--canon-yellow);
+        }
+
+        .af-status {
+            position: absolute;
+            bottom: -24px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 9px;
+            font-weight: 500;
+            letter-spacing: 1.5px;
+            color: var(--text-dim);
+            transition: color 0.2s;
+        }
+
+        #viewfinder.locked .af-status {
+            color: var(--canon-yellow);
+        }
+
+        /* === BOTTOM BAR === */
+        .hud-bottom {
+            position: absolute;
+            bottom: 0; left: 0; right: 0;
+            height: 48px;
+            background: linear-gradient(to top, rgba(0,0,0,0.7) 0%, transparent 100%);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 28px;
+        }
+
+        .frame-counter {
+            display: flex;
+            align-items: baseline;
+            gap: 6px;
+        }
+
+        .frame-number {
+            font-size: 20px;
+            font-weight: 300;
+            color: var(--canon-yellow);
+            font-variant-numeric: tabular-nums;
+            letter-spacing: -1px;
+        }
+
+        .frame-label {
+            font-size: 8px;
+            color: var(--text-dim);
+            font-weight: 500;
+            letter-spacing: 1px;
+        }
+
+        /* === PROGRESS INDICATOR === */
+        .progress-track {
+            position: absolute;
+            right: 28px;
+            top: 50%;
+            transform: translateY(-50%);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .progress-dot {
+            width: 6px;
+            height: 6px;
+            border: 1px solid #333;
+            border-radius: 50%;
+            transition: all 0.3s;
+        }
+
+        .progress-dot.completed {
+            background: var(--canon-yellow);
+            border-color: var(--canon-yellow);
+            box-shadow: 0 0 6px var(--canon-yellow);
+        }
+
+        .progress-dot.current {
+            border-color: rgba(255,255,255,0.6);
+        }
+
+        .progress-line {
+            width: 1px;
+            height: 10px;
+            background: #222;
+        }
+
+        .progress-line.active {
+            background: var(--canon-yellow);
+        }
+
+        /* ═══════════════════════════════════════════
+           PHOTO CAPTURE ANIMATION
+           ═══════════════════════════════════════════ */
+
+        #photo-capture {
+            position: fixed;
+            z-index: 50;
+            pointer-events: none;
+            opacity: 0;
+            border: 3px solid #fff;
+            box-shadow: 0 10px 60px rgba(0,0,0,0.8), 0 0 0 1px rgba(255,255,255,0.1);
+            transition: none;
+        }
+
+        #photo-capture.animating {
+            transition: all 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        /* Photo inventory indicator */
+        #photo-inventory {
+            position: fixed;
+            bottom: 80px;
+            right: 28px;
+            width: 60px;
+            height: 45px;
+            border: 2px solid #333;
+            background: rgba(0,0,0,0.8);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 40;
+            opacity: 0;
+            transition: opacity 0.3s, transform 0.3s, border-color 0.3s;
+        }
+
+        #photo-inventory.visible {
+            opacity: 1;
+        }
+
+        #photo-inventory.pulse {
+            border-color: var(--canon-yellow);
+            transform: scale(1.1);
+        }
+
+        #photo-inventory .count {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--canon-yellow);
+        }
+
+        #photo-inventory .icon {
+            position: absolute;
+            top: -8px;
+            right: -8px;
+            width: 16px;
+            height: 16px;
+            background: var(--canon-yellow);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+            color: #000;
+            font-weight: bold;
+        }
+
+        /* ═══════════════════════════════════════════
+           DEBUG PANEL
+           ═══════════════════════════════════════════ */
+
+        #debug-panel {
+            position: fixed;
+            top: 60px;
+            left: 20px;
+            background: rgba(0,0,0,0.9);
+            border: 1px solid #333;
+            padding: 16px;
+            z-index: 1000;
+            font-size: 11px;
+            color: #888;
+            min-width: 220px;
+            display: none;
+            pointer-events: auto;
+        }
+
+        #debug-panel.visible {
+            display: block;
+        }
+
+        #debug-panel h3 {
+            color: var(--canon-yellow);
+            font-size: 10px;
+            letter-spacing: 2px;
+            margin-bottom: 12px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid #222;
+        }
+
+        .debug-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .debug-row label {
+            color: #666;
+        }
+
+        .debug-row input[type="range"] {
+            width: 100px;
+            accent-color: var(--canon-yellow);
+        }
+
+        .debug-row input[type="checkbox"] {
+            accent-color: var(--canon-yellow);
+        }
+
+        .debug-row span {
+            min-width: 40px;
+            text-align: right;
+            color: #aaa;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .debug-section {
+            margin-top: 16px;
+            padding-top: 12px;
+            border-top: 1px solid #222;
+        }
+
+        .debug-section h4 {
+            color: #555;
+            font-size: 9px;
+            letter-spacing: 1px;
+            margin-bottom: 10px;
+        }
+
+        /* ═══════════════════════════════════════════
+           START SCREEN
+           ═══════════════════════════════════════════ */
+
+        .screen {
+            position: fixed;
+            inset: 0;
+            background: var(--canon-dark);
+            z-index: 100;
+            display: flex;
+            pointer-events: auto;
+            cursor: default;
+        }
+
+        #start-screen {
+            background: #000;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            min-height: 100vh;
+        }
+
+        .start-hero {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            padding: 60px 80px;
+            position: relative;
+            background: linear-gradient(135deg, #0a0a0a 0%, #111 100%);
+        }
+
+        .start-hero::after {
+            content: '';
+            position: absolute;
+            right: 0;
+            top: 10%;
+            bottom: 10%;
+            width: 1px;
+            background: linear-gradient(to bottom, transparent, #222, transparent);
+        }
+
+        .brand-line {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            margin-bottom: 48px;
+        }
+
+        .brand-mark {
+            width: 36px;
+            height: 36px;
+            border: 2px solid var(--canon-yellow);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+        }
+
+        .brand-mark::before {
+            content: '';
+            width: 10px;
+            height: 10px;
+            background: var(--canon-yellow);
+        }
+
+        .brand-text {
+            font-size: 10px;
+            letter-spacing: 5px;
+            color: #444;
+            font-weight: 500;
+        }
+
+        .title-main {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: clamp(80px, 12vw, 160px);
+            line-height: 0.85;
+            letter-spacing: 6px;
+            color: #fff;
+            margin-bottom: 16px;
+        }
+
+        .title-sub {
+            font-size: 12px;
+            letter-spacing: 8px;
+            color: #333;
+            font-weight: 400;
+            margin-bottom: 60px;
+            text-transform: uppercase;
+        }
+
+        .start-stats {
+            display: flex;
+            gap: 40px;
+        }
+
+        .stat-item {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .stat-value {
+            font-size: 28px;
+            font-weight: 200;
+            color: var(--canon-yellow);
+        }
+
+        .stat-label {
+            font-size: 9px;
+            letter-spacing: 2px;
+            color: #444;
+            font-weight: 500;
+        }
+
+        .start-info {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            padding: 60px 80px;
+            background: #000;
+        }
+
+        .info-header {
+            font-size: 10px;
+            letter-spacing: 4px;
+            color: #333;
+            margin-bottom: 40px;
+            font-weight: 500;
+        }
+
+        .instructions-grid {
+            display: grid;
+            gap: 0;
+            margin-bottom: 60px;
+        }
+
+        .instruction-row {
+            display: grid;
+            grid-template-columns: 48px 1fr;
+            gap: 24px;
+            padding: 24px 0;
+            border-bottom: 1px solid #151515;
+            align-items: start;
+        }
+
+        .instruction-row:first-child {
+            border-top: 1px solid #151515;
+        }
+
+        .instruction-icon {
+            width: 48px;
+            height: 48px;
+            border: 1px solid #222;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--canon-yellow);
+            background: rgba(244, 208, 63, 0.03);
+        }
+
+        .instruction-content h3 {
+            font-size: 13px;
+            font-weight: 500;
+            color: #999;
+            margin-bottom: 6px;
+            letter-spacing: 0.5px;
+        }
+
+        .instruction-content p {
+            font-size: 12px;
+            line-height: 1.7;
+            color: #555;
+            font-weight: 400;
+        }
+
+        .instruction-content .hl {
+            color: var(--canon-yellow);
+            font-weight: 500;
+        }
+
+        .key-hint {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 20px;
+            height: 18px;
+            padding: 0 5px;
+            background: #111;
+            border: 1px solid #2a2a2a;
+            font-size: 9px;
+            font-weight: 600;
+            color: #888;
+            margin: 0 2px;
+            border-radius: 2px;
+        }
+
+        .btn-start {
+            width: 100%;
+            max-width: 320px;
+            padding: 18px 32px;
+            background: transparent;
+            border: 1px solid #2a2a2a;
+            color: #888;
+            font-family: inherit;
+            font-size: 11px;
+            font-weight: 500;
+            letter-spacing: 4px;
+            cursor: pointer;
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .btn-start::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: var(--canon-yellow);
+            transform: scaleX(0);
+            transform-origin: left;
+            transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .btn-start span {
+            position: relative;
+            z-index: 1;
+            transition: color 0.3s;
+        }
+
+        .btn-start:hover {
+            border-color: var(--canon-yellow);
+        }
+
+        .btn-start:hover::before {
+            transform: scaleX(1);
+        }
+
+        .btn-start:hover span {
+            color: #000;
+        }
+
+        /* ═══════════════════════════════════════════
+           WIN SCREEN
+           ═══════════════════════════════════════════ */
+
+        #win-screen {
+            display: none;
+            background: radial-gradient(ellipse 120% 100% at 50% 30%, rgba(244, 208, 63, 0.08), transparent 50%),
+                        linear-gradient(180deg, #000 0%, #050505 100%);
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 60px 80px;
+            box-sizing: border-box;
+            min-height: 100vh;
+            overflow-y: auto;
+        }
+
+        .win-layout {
+            width: 100%;
+            max-width: 1300px;
+            display: grid;
+            grid-template-columns: 1.2fr 1fr;
+            gap: 80px;
+            align-items: center;
+            margin: auto;
+        }
+
+        .win-left {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+
+        .win-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 11px;
+            letter-spacing: 6px;
+            color: #444;
+            font-weight: 500;
+            text-transform: uppercase;
+            margin-bottom: 32px;
+        }
+
+        .win-badge::before {
+            content: '';
+            width: 12px;
+            height: 12px;
+            background: var(--canon-yellow);
+            box-shadow: 0 0 20px rgba(244,208,63,0.4);
+        }
+
+        .win-title {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: clamp(52px, 8vw, 100px);
+            color: var(--canon-yellow);
+            line-height: 0.95;
+            margin-bottom: 16px;
+            letter-spacing: 3px;
+            text-shadow: 0 0 60px rgba(244, 208, 63, 0.3);
+        }
+
+        .win-subtitle {
+            font-size: 11px;
+            letter-spacing: 6px;
+            color: #333;
+            margin-bottom: 32px;
+            font-weight: 500;
+            text-transform: uppercase;
+        }
+
+        .win-message {
+            font-size: 14px;
+            line-height: 2;
+            color: #666;
+            margin-bottom: 40px;
+            font-weight: 300;
+            max-width: 500px;
+        }
+
+        .win-message strong {
+            color: #999;
+            font-weight: 400;
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 14px;
+            flex-wrap: wrap;
+        }
+
+        .btn-primary {
+            padding: 14px 28px;
+            background: var(--canon-yellow);
+            border: none;
+            color: #000;
+            font-family: inherit;
+            font-size: 10px;
+            font-weight: 600;
+            letter-spacing: 3px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .btn-primary:hover {
+            background: #fff;
+            transform: translateY(-2px);
+            box-shadow: 0 10px 40px rgba(244, 208, 63, 0.3);
+        }
+
+        .btn-secondary {
+            padding: 14px 28px;
+            background: transparent;
+            border: 1px solid #2a2a2a;
+            color: #666;
+            font-family: inherit;
+            font-size: 10px;
+            font-weight: 500;
+            letter-spacing: 3px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .btn-secondary:hover {
+            border-color: #fff;
+            color: #fff;
+        }
+
+        .win-right {
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+            padding-left: 60px;
+            border-left: 1px solid #1a1a1a;
+            height: 100%;
+            justify-content: center;
+        }
+
+        .win-stats {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 20px;
+        }
+
+        .win-stat {
+            display: flex;
+            align-items: baseline;
+            justify-content: space-between;
+            gap: 20px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid #151515;
+        }
+
+        .win-stat:last-child {
+            border-bottom: none;
+            padding-bottom: 0;
+        }
+
+        .win-stat-label {
+            font-size: 9px;
+            letter-spacing: 3px;
+            color: #444;
+            font-weight: 500;
+        }
+
+        .win-stat-value {
+            font-size: 36px;
+            font-weight: 200;
+            color: #fff;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .win-hint {
+            font-size: 11px;
+            line-height: 1.7;
+            color: #3a3a3a;
+            margin-top: 16px;
+        }
+
+        .win-meta {
+            font-size: 9px;
+            letter-spacing: 3px;
+            color: #2a2a2a;
+            text-transform: uppercase;
+            margin-top: 16px;
+        }
+
+        /* === DEATH SCREEN === */
+        #death-screen {
+            display: none;
+            background: #000;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+        }
+
+        .death-icon {
+            width: 48px;
+            height: 48px;
+            border: 1px solid #222;
+            margin-bottom: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .death-icon::before {
+            content: '×';
+            font-size: 24px;
+            color: #333;
+        }
+
+        .death-title {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 48px;
+            color: #1a1a1a;
+            text-align: center;
+            margin-bottom: 12px;
+            letter-spacing: 4px;
+        }
+
+        .death-message {
+            color: #333;
+            text-align: center;
+            margin-bottom: 40px;
+            font-size: 13px;
+        }
+
+        /* === GALLERY PANEL === */
+        #gallery-panel {
+            position: fixed;
+            top: 0;
+            right: -380px;
+            width: 380px;
+            height: 100%;
+            background: rgba(0,0,0,0.98);
+            border-left: 1px solid #1a1a1a;
+            z-index: 200;
+            transition: right 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            overflow-y: auto;
+            pointer-events: auto;
+            cursor: default;
+        }
+
+        #gallery-panel.open {
+            right: 0;
+        }
+
+        .gallery-header {
+            padding: 28px;
+            border-bottom: 1px solid #1a1a1a;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: sticky;
+            top: 0;
+            background: #000;
+            z-index: 1;
+        }
+
+        .gallery-title {
+            font-size: 10px;
+            letter-spacing: 4px;
+            color: var(--canon-yellow);
+            font-weight: 500;
+        }
+
+        .gallery-count {
+            font-size: 10px;
+            color: #333;
+            margin-left: 12px;
+        }
+
+        .gallery-close {
+            width: 32px;
+            height: 32px;
+            background: none;
+            border: 1px solid #222;
+            color: #444;
+            cursor: pointer;
+            font-size: 18px;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .gallery-close:hover {
+            border-color: #fff;
+            color: #fff;
+        }
+
+        .gallery-grid {
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .photo-card {
+            background: #0a0a0a;
+            border: 1px solid #1a1a1a;
+            overflow: hidden;
+            transition: border-color 0.3s;
+        }
+
+        .photo-card:hover {
+            border-color: #333;
+        }
+
+        .photo-card img {
+            width: 100%;
+            display: block;
+        }
+
+        .photo-info {
+            padding: 14px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .photo-meta {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .photo-level {
+            font-size: 10px;
+            color: #666;
+            font-weight: 500;
+        }
+
+        .photo-time {
+            font-size: 9px;
+            color: #333;
+        }
+
+        .photo-download {
+            font-size: 9px;
+            color: #555;
+            text-decoration: none;
+            padding: 8px 14px;
+            border: 1px solid #222;
+            transition: all 0.2s;
+            letter-spacing: 1px;
+        }
+
+        .photo-download:hover {
+            background: var(--canon-yellow);
+            border-color: var(--canon-yellow);
+            color: #000;
+        }
+
+        .gallery-empty {
+            padding: 60px 20px;
+            text-align: center;
+            color: #2a2a2a;
+            font-size: 12px;
+        }
+
+        /* === EFFECTS === */
+        .vignette {
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            z-index: 8;
+            background: radial-gradient(ellipse at center, transparent 50%, rgba(0,0,0,0.55) 100%);
+        }
+
+        #flash-overlay {
+            position: fixed;
+            inset: 0;
+            background: #fff;
+            z-index: 150;
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        /* Film grain overlay */
+        #film-grain {
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            z-index: 9;
+            opacity: 0.08;
+            mix-blend-mode: overlay;
+        }
+
+        /* === ANIMATIONS === */
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
+
+        /* === RESPONSIVE === */
+        @media (max-width: 1100px) {
+            #win-screen { padding: 50px 40px; }
+            .win-layout { grid-template-columns: 1fr; gap: 36px; }
+            .win-right { padding-left: 0; border-left: none; border-top: 1px solid #1a1a1a; padding-top: 36px; }
+            .win-stats { grid-template-columns: repeat(3, 1fr); gap: 16px; }
+            .win-stat { flex-direction: column; gap: 6px; border-bottom: none; padding-bottom: 0; }
+            .win-stat-value { font-size: 28px; }
+        }
+
+        @media (max-width: 900px) {
+            #start-screen { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
+            .start-hero { padding: 40px; min-height: 40vh; }
+            .start-hero::after { display: none; }
+            .start-info { padding: 40px; }
+            .title-main { font-size: 72px; }
+            .start-stats { gap: 24px; }
+            .stat-value { font-size: 22px; }
+            #win-screen { padding: 40px 30px; }
+            .win-title { font-size: 48px; }
+            .win-badge { margin-bottom: 24px; }
+            .win-message { font-size: 13px; margin-bottom: 30px; }
+            #debug-panel { display: none !important; }
+        }
+
+        @media (max-width: 600px) {
+            .start-hero, .start-info { padding: 24px; }
+            .title-main { font-size: 56px; }
+            .instruction-row { grid-template-columns: 40px 1fr; gap: 16px; padding: 18px 0; }
+            .instruction-icon { width: 40px; height: 40px; font-size: 10px; }
+            .hud-top, .hud-bottom { padding: 10px 16px; }
+            #viewfinder { width: 220px; height: 140px; }
+            .btn-group { flex-direction: column; align-items: stretch; }
+            #win-screen { padding: 30px 20px; }
+            .win-layout { gap: 28px; }
+            .win-title { font-size: 40px; }
+            .win-subtitle { font-size: 9px; letter-spacing: 4px; margin-bottom: 24px; }
+            .win-stats { grid-template-columns: 1fr; gap: 12px; }
+            .win-stat-value { font-size: 24px; }
+            .win-hint { font-size: 10px; }
+            .win-meta { font-size: 8px; }
+        }
+    </style>
+</head>
+<body>
+    <div id="canvas-container"></div>
+
+    <!-- Film Grain Canvas -->
+    <canvas id="film-grain"></canvas>
+
+    <!-- UI LAYER -->
+    <div id="ui-layer">
+        <div class="hud-top">
+            <div class="info-cluster">
+                <div class="mode-badge">M</div>
+                <div class="info-item">
+                    <span class="info-label">ISO</span>
+                    <span class="info-value accent">3200</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">f/</span>
+                    <span class="info-value">2.8</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">SS</span>
+                    <span class="info-value">1/125</span>
+                </div>
+            </div>
+
+            <div class="battery">
+                <div class="battery-icon">
+                    <div class="battery-fill" id="battery-fill"></div>
+                </div>
+                <span class="battery-text" id="battery-text">100%</span>
+            </div>
+        </div>
+
+        <div id="viewfinder">
+            <div class="crosshair"></div>
+            <div class="focus-bracket tl"></div>
+            <div class="focus-bracket tr"></div>
+            <div class="focus-bracket bl"></div>
+            <div class="focus-bracket br"></div>
+            <div class="af-status" id="af-status">AF</div>
+        </div>
+
+        <div class="progress-track">
+            <div class="progress-dot" id="dot-0"></div>
+            <div class="progress-line" id="line-0"></div>
+            <div class="progress-dot" id="dot-1"></div>
+            <div class="progress-line" id="line-1"></div>
+            <div class="progress-dot" id="dot-2"></div>
+            <div class="progress-line" id="line-2"></div>
+            <div class="progress-dot" id="dot-3"></div>
+        </div>
+
+        <div class="hud-bottom">
+            <div class="info-cluster">
+                <div class="info-item">
+                    <span class="info-label">WB</span>
+                    <span class="info-value">AUTO</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">AF</span>
+                    <span class="info-value">ONE SHOT</span>
+                </div>
+            </div>
+
+            <div class="frame-counter">
+                <span class="frame-number" id="frame-count">000</span>
+                <span class="frame-label">FRAMES</span>
+            </div>
+        </div>
+
+        <!-- Photo Inventory -->
+        <div id="photo-inventory">
+            <span class="count" id="inventory-count">0</span>
+            <span class="icon">📷</span>
+        </div>
+    </div>
+
+    <!-- Photo Capture Animation Element -->
+    <img id="photo-capture" src="" alt="">
+
+    <!-- DEBUG PANEL -->
+    <div id="debug-panel">
+        <h3>⚙ DEBUG PANEL</h3>
+        
+        <div class="debug-section">
+            <h4>POST-PROCESSING</h4>
+            <div class="debug-row">
+                <label>Bloom</label>
+                <input type="range" id="debug-bloom" min="0" max="3" step="0.1" value="0.8">
+                <span id="debug-bloom-val">0.8</span>
+            </div>
+            <div class="debug-row">
+                <label>DoF Focus</label>
+                <input type="range" id="debug-dof" min="1" max="50" step="1" value="10">
+                <span id="debug-dof-val">10</span>
+            </div>
+            <div class="debug-row">
+                <label>Film Grain</label>
+                <input type="range" id="debug-grain" min="0" max="0.3" step="0.01" value="0.08">
+                <span id="debug-grain-val">0.08</span>
+            </div>
+            <div class="debug-row">
+                <label>Chromatic Ab.</label>
+                <input type="checkbox" id="debug-chromatic" checked>
+            </div>
+        </div>
+
+        <div class="debug-section">
+            <h4>ENVIRONMENT</h4>
+            <div class="debug-row">
+                <label>Fog Density</label>
+                <input type="range" id="debug-fog" min="0" max="0.05" step="0.001" value="0.016">
+                <span id="debug-fog-val">0.016</span>
+            </div>
+            <div class="debug-row">
+                <label>Ambient Light</label>
+                <input type="range" id="debug-ambient" min="0" max="1" step="0.05" value="0.4">
+                <span id="debug-ambient-val">0.4</span>
+            </div>
+        </div>
+
+        <div class="debug-section">
+            <h4>AUDIO</h4>
+            <div class="debug-row">
+                <label>Wind Volume</label>
+                <input type="range" id="debug-wind" min="0" max="0.3" step="0.01" value="0.08">
+                <span id="debug-wind-val">0.08</span>
+            </div>
+            <div class="debug-row">
+                <label>Carnival Range</label>
+                <input type="range" id="debug-carnival" min="5" max="30" step="1" value="12">
+                <span id="debug-carnival-val">12</span>
+            </div>
+            <div class="debug-row">
+                <label>Birthday Vol</label>
+                <input type="range" id="debug-birthday" min="0" max="0.3" step="0.01" value="0.06">
+                <span id="debug-birthday-val">0.06</span>
+            </div>
+        </div>
+
+        <div class="debug-section">
+            <h4>GAMEPLAY</h4>
+            <div class="debug-row">
+                <label>Move Speed</label>
+                <input type="range" id="debug-speed" min="3" max="20" step="0.5" value="9">
+                <span id="debug-speed-val">9</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- START SCREEN -->
+    <div id="start-screen" class="screen">
+        <div class="start-hero">
+            <div class="brand-line">
+                <div class="brand-mark"></div>
+                <span class="brand-text">v.01</span>
+            </div>
+
+            <h1 class="title-main">BRUTAL</h1>
+            <p class="title-sub">Perspectiva tectónica</p>
+
+            <div class="start-stats">
+                <div class="stat-item">
+                    <span class="stat-value">4</span>
+                    <span class="stat-label">PUZZLES</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-value">∞</span>
+                    <span class="stat-label">FOTOS</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-value">1</span>
+                    <span class="stat-label">DESTINO</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="start-info">
+            <p class="info-header">INSTRUCCIONES</p>
+
+            <div class="instructions-grid">
+                <div class="instruction-row">
+                    <div class="instruction-icon">01</div>
+                    <div class="instruction-content">
+                        <h3>Explora el Vacío</h3>
+                        <p>Te encuentras en un espacio fragmentado. El camino está roto, pero tu cámara puede reconstruirlo.</p>
+                    </div>
+                </div>
+
+                <div class="instruction-row">
+                    <div class="instruction-icon">02</div>
+                    <div class="instruction-content">
+                        <h3>Controles</h3>
+                        <p>Usa <span class="key-hint">W</span><span class="key-hint">A</span><span class="key-hint">S</span><span class="key-hint">D</span> para moverte. El puntero del mouse controla tu mirada. <span class="key-hint">G</span> galería. <span class="key-hint">P</span> debug.</p>
+                    </div>
+                </div>
+
+                <div class="instruction-row">
+                    <div class="instruction-icon">03</div>
+                    <div class="instruction-content">
+                        <h3>Fotografía</h3>
+                        <p>Busca el encuadre. Cuando el visor brille en <span class="hl">AMARILLO</span>, haz <span class="key-hint">CLICK</span> para capturar y construir un camino.</p>
+                    </div>
+                </div>
+
+                <div class="instruction-row">
+                    <div class="instruction-icon">04</div>
+                    <div class="instruction-content">
+                        <h3>Energía</h3>
+                        <p>Tu batería se agota lentamente. Cada foto la recarga.</p>
+                    </div>
+                </div>
+            </div>
+
+            <button class="btn-start" id="btn-start">
+                <span>COMENZAR</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- WIN SCREEN -->
+    <div id="win-screen" class="screen">
+        <div class="win-layout">
+            <div class="win-left">
+                <div class="win-badge">RECORRIDO COMPLETADO</div>
+                
+                <h1 class="win-title">¡FELIZ CUMPLEAÑOS<br>LILA!</h1>
+                <p class="win-subtitle">HAS COMPLETADO EL RECORRIDO</p>
+
+                <p class="win-message">
+                    Has construido tu camino a través del vacío.<br />
+                    Cada fotografía es un recuerdo. Cada encuadre, una decisión.<br /><br />
+                    <strong>Espero que hayas tenido un gran cumpleaños y un mejor siguiente año para ti y tus seres queridos.</strong>
+                </p>
+
+                <div class="btn-group">
+                    <button class="btn-primary" id="btn-gallery-win">VER GALERÍA</button>
+                    <button class="btn-secondary" onclick="location.reload()">REINICIAR</button>
+                </div>
+            </div>
+
+            <div class="win-right">
+                <div class="win-stats">
+                    <div class="win-stat">
+                        <div class="win-stat-label">FOTOS CAPTURADAS</div>
+                        <div class="win-stat-value" id="final-photos">0</div>
+                    </div>
+                    <div class="win-stat">
+                        <div class="win-stat-label">PUZZLES RESUELTOS</div>
+                        <div class="win-stat-value" id="final-puzzles">4</div>
+                    </div>
+                    <div class="win-stat">
+                        <div class="win-stat-label">TIEMPO TOTAL</div>
+                        <div class="win-stat-value" id="final-time">0:00</div>
+                    </div>
+                </div>
+
+                <p class="win-hint">
+                    Tip: puedes seguir guardando tus fotos desde la galería.<br>
+                    Presiona G o usa el botón para acceder.
+                </p>
+
+                <p class="win-meta">G: GALERÍA · CLICK: FOTO · ESC: CERRAR</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- DEATH SCREEN -->
+    <div id="death-screen" class="screen">
+        <div class="death-icon"></div>
+        <h1 class="death-title">SEÑAL PERDIDA</h1>
+        <p class="death-message">La batería se agotó.</p>
+        <button class="btn-secondary" onclick="location.reload()">REINICIAR</button>
+    </div>
+
+    <!-- GALLERY PANEL -->
+    <div id="gallery-panel">
+        <div class="gallery-header">
+            <div>
+                <span class="gallery-title">GALERÍA</span>
+                <span class="gallery-count" id="gallery-count">0 fotos</span>
+            </div>
+            <button class="gallery-close" id="gallery-close">×</button>
+        </div>
+        <div class="gallery-grid" id="gallery-grid">
+            <p class="gallery-empty">Las fotos aparecerán aquí</p>
+        </div>
+    </div>
+
+    <!-- Effects -->
+    <div class="vignette"></div>
+    <div id="flash-overlay"></div>
+
+    <!-- Libraries -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/EffectComposer.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/RenderPass.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/shaders/CopyShader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/shaders/LuminosityHighPassShader.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+
+    <script>
+        'use strict';
+
+        // ═══════════════════════════════════════════════════════════════════
+        // CONFIGURATION
+        // ═══════════════════════════════════════════════════════════════════
+
+        const CONFIG = {
+            colors: {
+                bg: 0x080808,
+                fog: 0x0a0a0a,
+                accent: 0xF4D03F,
+                concrete: 0x1a1a1a
+            },
+            gameplay: {
+                moveSpeed: 9.0,
+                mouseSensitivity: 0.002,
+                energyDrain: 1.0,
+                photoRecharge: 22,
+                photoCooldown: 500
+            },
+            camera: {
+                fov: 70,
+                near: 0.1,
+                far: 350,
+                eyeHeight: 1.7
+            },
+            postProcessing: {
+                bloomStrength: 0.8,
+                bloomRadius: 0.4,
+                bloomThreshold: 0.7,
+                dofFocus: 10,
+                dofAperture: 0.025,
+                filmGrain: 0.10,
+                chromaticAberration: true
+            },
+            audio: {
+                windVolume: 0.03,
+                carnivalRange: 12,
+                carnivalVolume: 0.12,
+                birthdayRange: 35,
+                birthdayVolume: 0.15,
+                birthdayMaxVolume: 0.30
+            },
+            assets: {
+                basePath: './',
+                museum: [
+                    { file: 'mascaradiablo1.glb', label: 'Máscara I', x: -4.2, z: -12 },
+                    { file: 'pepino.gltf', label: 'Pepino', x: 4.2, z: -46 },
+                    { file: 'mascaradiablo2.gltf', label: 'Máscara II', x: -4.2, z: -78 }
+                ],
+                finalCake: { file: 'tortaunicornio.gltf', label: 'Torta', x: 0, z: -160 }
+            }
+        };
+
+        // ═══════════════════════════════════════════════════════════════════
+        // GAME STATE
+        // ═══════════════════════════════════════════════════════════════════
+
+        const State = {
+            active: false,
+            paused: false,
+            energy: 100,
+            shots: 0,
+            level: 0,
+            isLocked: false,
+            canShoot: true,
+            initialized: false,
+            startTime: null,
+            debugVisible: false
+        };
+
+        // ═══════════════════════════════════════════════════════════════════
+        // FILM GRAIN GENERATOR
+        // ═══════════════════════════════════════════════════════════════════
+
+        const FilmGrain = {
+            canvas: null,
+            ctx: null,
+
+            init() {
+                this.canvas = document.getElementById('film-grain');
+                this.canvas.width = window.innerWidth;
+                this.canvas.height = window.innerHeight;
+                this.ctx = this.canvas.getContext('2d');
+            },
+
+            update() {
+                if (!this.ctx) return;
+                const imageData = this.ctx.createImageData(this.canvas.width, this.canvas.height);
+                const data = imageData.data;
+                
+                for (let i = 0; i < data.length; i += 4) {
+                    const noise = Math.random() * 255;
+                    data[i] = noise;
+                    data[i + 1] = noise;
+                    data[i + 2] = noise;
+                    data[i + 3] = 255;
+                }
+                
+                this.ctx.putImageData(imageData, 0, 0);
+            },
+
+            resize() {
+                if (this.canvas) {
+                    this.canvas.width = window.innerWidth;
+                    this.canvas.height = window.innerHeight;
+                }
+            }
+        };
+
+        // ═══════════════════════════════════════════════════════════════════
+        // ENHANCED AUDIO SYSTEM WITH POSITIONAL AUDIO
+        // ═══════════════════════════════════════════════════════════════════
+
+        const Audio = {
+            ctx: null,
+            gain: null,
+            listener: null,
+            
+            // Ambient sounds
+            windSource: null,
+            windGain: null,
+            
+            // Positional audio sources
+            carnivalSources: [],
+            
+            // Birthday music system
+            birthdaySource: null,
+            birthdayGain: null,
+            birthdayPosition: new THREE.Vector3(0, 5, -185),
+            birthdayPlaying: false,
+            birthdayIntensified: false,
+
+            init() {
+                if (this.ctx) return;
+                this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+                this.gain = this.ctx.createGain();
+                this.gain.gain.value = 0.35;
+                this.gain.connect(this.ctx.destination);
+                
+                // Create Three.js audio listener
+                this.listener = new THREE.AudioListener();
+                
+                // Start ambient wind
+                this.startWindAmbient();
+            },
+
+            startWindAmbient() {
+                if (!this.ctx) return;
+                
+                // Create wind noise using filtered noise
+                const bufferSize = this.ctx.sampleRate * 4;
+                const buffer = this.ctx.createBuffer(2, bufferSize, this.ctx.sampleRate);
+                
+                for (let channel = 0; channel < 2; channel++) {
+                    const data = buffer.getChannelData(channel);
+                    let lastOut = 0;
+                    for (let i = 0; i < bufferSize; i++) {
+                        const white = Math.random() * 2 - 1;
+                        // Brown noise (more natural wind)
+                        lastOut = (lastOut + (0.02 * white)) / 1.02;
+                        data[i] = lastOut * 3.5;
+                        
+                        // Add occasional gusts
+                        if (Math.random() < 0.0001) {
+                            for (let j = 0; j < 5000 && i + j < bufferSize; j++) {
+                                data[i + j] *= 1 + Math.sin(j / 500) * 0.5;
+                            }
+                        }
+                    }
+                }
+                
+                this.windSource = this.ctx.createBufferSource();
+                this.windSource.buffer = buffer;
+                this.windSource.loop = true;
+                
+                // Low-pass filter for muffled wind
+                const lowpass = this.ctx.createBiquadFilter();
+                lowpass.type = 'lowpass';
+                lowpass.frequency.value = 400;
+                
+                this.windGain = this.ctx.createGain();
+                this.windGain.gain.value = CONFIG.audio.windVolume;
+                
+                this.windSource.connect(lowpass);
+                lowpass.connect(this.windGain);
+                this.windGain.connect(this.ctx.destination);
+                
+                this.windSource.start();
+            },
+
+            setWindVolume(vol) {
+                if (this.windGain) {
+                    this.windGain.gain.setTargetAtTime(vol, this.ctx.currentTime, 0.1);
+                }
+            },
+
+            // Start birthday music loop (positional, plays when near final room)
+            startBirthdayMusic() {
+                if (!this.ctx || this.birthdayPlaying) return;
+                this.birthdayPlaying = true;
+                
+                this.birthdayGain = this.ctx.createGain();
+                this.birthdayGain.gain.value = 0;
+                this.birthdayGain.connect(this.ctx.destination);
+                
+                // Happy Birthday melody notes with timing
+                const birthdayMelody = [
+                    { freq: 392, dur: 0.25 }, // G4
+                    { freq: 392, dur: 0.25 }, // G4
+                    { freq: 440, dur: 0.5 },  // A4
+                    { freq: 392, dur: 0.5 },  // G4
+                    { freq: 523, dur: 0.5 },  // C5
+                    { freq: 494, dur: 1.0 },  // B4
+                    
+                    { freq: 392, dur: 0.25 }, // G4
+                    { freq: 392, dur: 0.25 }, // G4
+                    { freq: 440, dur: 0.5 },  // A4
+                    { freq: 392, dur: 0.5 },  // G4
+                    { freq: 587, dur: 0.5 },  // D5
+                    { freq: 523, dur: 1.0 },  // C5
+                    
+                    { freq: 392, dur: 0.25 }, // G4
+                    { freq: 392, dur: 0.25 }, // G4
+                    { freq: 784, dur: 0.5 },  // G5
+                    { freq: 659, dur: 0.5 },  // E5
+                    { freq: 523, dur: 0.5 },  // C5
+                    { freq: 494, dur: 0.5 },  // B4
+                    { freq: 440, dur: 1.0 },  // A4
+                    
+                    { freq: 698, dur: 0.25 }, // F5
+                    { freq: 698, dur: 0.25 }, // F5
+                    { freq: 659, dur: 0.5 },  // E5
+                    { freq: 523, dur: 0.5 },  // C5
+                    { freq: 587, dur: 0.5 },  // D5
+                    { freq: 523, dur: 1.5 },  // C5
+                ];
+                
+                let noteIndex = 0;
+                
+                const playNextNote = () => {
+                    if (!this.birthdayPlaying) return;
+                    
+                    const note = birthdayMelody[noteIndex];
+                    const t = this.ctx.currentTime;
+                    
+                    // Create oscillator with warm tone
+                    const osc = this.ctx.createOscillator();
+                    const oscGain = this.ctx.createGain();
+                    
+                    // Mix of sine and triangle for music box sound
+                    osc.type = 'triangle';
+                    osc.frequency.value = note.freq;
+                    
+                    // Add slight vibrato for dreamy effect
+                    const vibrato = this.ctx.createOscillator();
+                    const vibratoGain = this.ctx.createGain();
+                    vibrato.frequency.value = 5;
+                    vibratoGain.gain.value = 3;
+                    vibrato.connect(vibratoGain);
+                    vibratoGain.connect(osc.frequency);
+                    vibrato.start(t);
+                    vibrato.stop(t + note.dur);
+                    
+                    // Envelope
+                    oscGain.gain.setValueAtTime(0, t);
+                    oscGain.gain.linearRampToValueAtTime(0.15, t + 0.05);
+                    oscGain.gain.exponentialRampToValueAtTime(0.01, t + note.dur * 0.95);
+                    
+                    osc.connect(oscGain);
+                    oscGain.connect(this.birthdayGain);
+                    
+                    osc.start(t);
+                    osc.stop(t + note.dur);
+                    
+                    noteIndex = (noteIndex + 1) % birthdayMelody.length;
+                    
+                    // Schedule next note
+                    setTimeout(playNextNote, note.dur * 1000);
+                };
+                
+                // Start the melody loop
+                playNextNote();
+            },
+            
+            // Update birthday music volume based on distance
+            updateBirthdayAudio(cameraPos) {
+                if (!this.ctx || !this.birthdayGain) return;
+                
+                const distance = cameraPos.distanceTo(this.birthdayPosition);
+                const maxRange = CONFIG.audio.birthdayRange;
+                
+                if (distance < maxRange) {
+                    // Calculate volume based on distance (closer = louder)
+                    const normalizedDist = 1 - (distance / maxRange);
+                    const baseVolume = this.birthdayIntensified 
+                        ? CONFIG.audio.birthdayMaxVolume 
+                        : CONFIG.audio.birthdayVolume;
+                    const volume = normalizedDist * normalizedDist * baseVolume; // Quadratic falloff
+                    this.birthdayGain.gain.setTargetAtTime(volume, this.ctx.currentTime, 0.3);
+                } else {
+                    this.birthdayGain.gain.setTargetAtTime(0, this.ctx.currentTime, 0.3);
+                }
+            },
+            
+            // Intensify birthday music for win screen
+            intensifyBirthday() {
+                this.birthdayIntensified = true;
+                if (this.birthdayGain) {
+                    this.birthdayGain.gain.setTargetAtTime(
+                        CONFIG.audio.birthdayMaxVolume, 
+                        this.ctx.currentTime, 
+                        0.5
+                    );
+                }
+            },
+
+            // Create positional carnival music for museum objects
+            createCarnivalSource(position) {
+                if (!this.ctx) return null;
+                
+                const source = {
+                    position: position.clone(),
+                    oscillators: [],
+                    gainNode: this.ctx.createGain(),
+                    panner: this.ctx.createPanner()
+                };
+                
+                // Configure panner for 3D audio
+                source.panner.panningModel = 'HRTF';
+                source.panner.distanceModel = 'inverse';
+                source.panner.refDistance = 3;
+                source.panner.maxDistance = CONFIG.audio.carnivalRange;
+                source.panner.rolloffFactor = 2;
+                source.panner.setPosition(position.x, position.y, position.z);
+                
+                source.gainNode.gain.value = 0;
+                source.gainNode.connect(source.panner);
+                source.panner.connect(this.ctx.destination);
+                
+                // Create distorted carnival melody
+                const carnivalNotes = [
+                    { freq: 523.25, dur: 0.2 }, // C5
+                    { freq: 587.33, dur: 0.2 }, // D5
+                    { freq: 659.25, dur: 0.2 }, // E5
+                    { freq: 698.46, dur: 0.2 }, // F5
+                    { freq: 783.99, dur: 0.3 }, // G5
+                    { freq: 659.25, dur: 0.2 }, // E5
+                    { freq: 523.25, dur: 0.4 }, // C5
+                ];
+                
+                let noteIndex = 0;
+                const playNote = () => {
+                    if (!State.active) return;
+                    
+                    const note = carnivalNotes[noteIndex];
+                    const osc = this.ctx.createOscillator();
+                    const noteGain = this.ctx.createGain();
+                    
+                    // Distorted organ sound
+                    osc.type = 'sawtooth';
+                    osc.frequency.value = note.freq * (0.98 + Math.random() * 0.04); // Slight detuning
+                    
+                    noteGain.gain.setValueAtTime(0.1, this.ctx.currentTime);
+                    noteGain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + note.dur * 0.9);
+                    
+                    osc.connect(noteGain);
+                    noteGain.connect(source.gainNode);
+                    
+                    osc.start();
+                    osc.stop(this.ctx.currentTime + note.dur);
+                    
+                    noteIndex = (noteIndex + 1) % carnivalNotes.length;
+                    
+                    setTimeout(playNote, note.dur * 1000);
+                };
+                
+                // Start playing after a random delay
+                setTimeout(playNote, Math.random() * 2000);
+                
+                this.carnivalSources.push(source);
+                return source;
+            },
+
+            // Update carnival audio based on camera position
+            updatePositionalAudio(cameraPos) {
+                if (!this.ctx) return;
+                
+                this.carnivalSources.forEach(source => {
+                    const distance = cameraPos.distanceTo(source.position);
+                    const maxRange = CONFIG.audio.carnivalRange;
+                    
+                    if (distance < maxRange) {
+                        // Calculate volume based on distance with echo effect
+                        const volume = Math.max(0, 1 - (distance / maxRange)) * CONFIG.audio.carnivalVolume;
+                        source.gainNode.gain.setTargetAtTime(volume, this.ctx.currentTime, 0.1);
+                    } else {
+                        source.gainNode.gain.setTargetAtTime(0, this.ctx.currentTime, 0.1);
+                    }
+                });
+            },
+
+            play(type) {
+                if (!this.ctx) return;
+                if (this.ctx.state === 'suspended') this.ctx.resume();
+
+                const t = this.ctx.currentTime;
+
+                if (type === 'shutter') {
+                    const bufferSize = this.ctx.sampleRate * 0.08;
+                    const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+                    const data = buffer.getChannelData(0);
+                    for (let i = 0; i < bufferSize; i++) {
+                        data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (bufferSize * 0.06));
+                    }
+                    const source = this.ctx.createBufferSource();
+                    source.buffer = buffer;
+                    const filter = this.ctx.createBiquadFilter();
+                    filter.type = 'bandpass';
+                    filter.frequency.value = 800;
+                    const g = this.ctx.createGain();
+                    g.gain.setValueAtTime(0.6, t);
+                    g.gain.exponentialRampToValueAtTime(0.01, t + 0.08);
+                    source.connect(filter);
+                    filter.connect(g);
+                    g.connect(this.gain);
+                    source.start(t);
+                }
+
+                if (type === 'lock') {
+                    [0, 0.08].forEach(delay => {
+                        const osc = this.ctx.createOscillator();
+                        const g = this.ctx.createGain();
+                        osc.type = 'sine';
+                        osc.frequency.value = 1400;
+                        g.gain.setValueAtTime(0.05, t + delay);
+                        g.gain.exponentialRampToValueAtTime(0.001, t + delay + 0.06);
+                        osc.connect(g);
+                        g.connect(this.gain);
+                        osc.start(t + delay);
+                        osc.stop(t + delay + 0.06);
+                    });
+                }
+
+                if (type === 'solve') {
+                    [130.81, 164.81, 196.00, 261.63].forEach((freq, i) => {
+                        const osc = this.ctx.createOscillator();
+                        const g = this.ctx.createGain();
+                        osc.type = 'triangle';
+                        osc.frequency.value = freq;
+                        g.gain.setValueAtTime(0.05, t + i * 0.1);
+                        g.gain.linearRampToValueAtTime(0, t + 2.5);
+                        osc.connect(g);
+                        g.connect(this.gain);
+                        osc.start(t + i * 0.1);
+                        osc.stop(t + 2.5);
+                    });
+                }
+
+                if (type === 'birthday') {
+                    const notes = [392, 392, 440, 392, 523, 494, 392, 392, 440, 392, 587, 523];
+                    let time = t;
+                    notes.forEach((f, i) => {
+                        const osc = this.ctx.createOscillator();
+                        const g = this.ctx.createGain();
+                        osc.frequency.value = f;
+                        const dur = (i === 2 || i === 5 || i === 8 || i === 11) ? 0.4 : 0.2;
+                        g.gain.setValueAtTime(0.08, time);
+                        g.gain.exponentialRampToValueAtTime(0.001, time + dur * 0.9);
+                        osc.connect(g);
+                        g.connect(this.gain);
+                        osc.start(time);
+                        osc.stop(time + dur);
+                        time += dur;
+                    });
+                }
+            }
+        };
+
+        // ═══════════════════════════════════════════════════════════════════
+        // GALLERY SYSTEM
+        // ═══════════════════════════════════════════════════════════════════
+
+        const Gallery = {
+            isOpen: false,
+            photos: [],
+
+            add(dataUrl, levelName) {
+                const time = new Date().toLocaleTimeString('es-ES', {
+                    hour: '2-digit', minute: '2-digit', second: '2-digit'
+                });
+
+                this.photos.push({ dataUrl, time, levelName });
+                this.updateCount();
+                this.updateInventory();
+
+                const grid = document.getElementById('gallery-grid');
+                const empty = grid.querySelector('.gallery-empty');
+                if (empty) empty.remove();
+
+                const card = document.createElement('div');
+                card.className = 'photo-card';
+                card.innerHTML = `
+                    <img src="${dataUrl}" alt="Foto">
+                    <div class="photo-info">
+                        <div class="photo-meta">
+                            <span class="photo-level">${levelName}</span>
+                            <span class="photo-time">${time}</span>
+                        </div>
+                        <a class="photo-download" href="${dataUrl}" download="brutal_${Date.now()}.jpg">GUARDAR</a>
+                    </div>
+                `;
+                grid.prepend(card);
+            },
+
+            updateCount() {
+                document.getElementById('gallery-count').textContent = `${this.photos.length} foto${this.photos.length !== 1 ? 's' : ''}`;
+            },
+
+            updateInventory() {
+                const inv = document.getElementById('photo-inventory');
+                const count = document.getElementById('inventory-count');
+                count.textContent = this.photos.length;
+                inv.classList.add('visible');
+            },
+
+            toggle() {
+                this.isOpen = !this.isOpen;
+                const panel = document.getElementById('gallery-panel');
+
+                if (this.isOpen) {
+                    panel.classList.add('open');
+                    if (document.pointerLockElement) document.exitPointerLock();
+                    State.paused = true;
+                } else {
+                    panel.classList.remove('open');
+                    const winScreen = document.getElementById('win-screen');
+                    if (State.active && winScreen.style.display !== 'flex') {
+                        document.body.requestPointerLock();
+                        State.paused = false;
+                    }
+                }
+            }
+        };
+
+        // ═══════════════════════════════════════════════════════════════════
+        // PHOTO CAPTURE ANIMATION
+        // ═══════════════════════════════════════════════════════════════════
+
+        const PhotoCapture = {
+            element: null,
+
+            init() {
+                this.element = document.getElementById('photo-capture');
+            },
+
+            animate(dataUrl) {
+                if (!this.element) return;
+
+                const inventory = document.getElementById('photo-inventory');
+                const invRect = inventory.getBoundingClientRect();
+
+                // Start position (center of screen, viewfinder size)
+                const startWidth = 280;
+                const startHeight = 180;
+                const startX = (window.innerWidth - startWidth) / 2;
+                const startY = (window.innerHeight - startHeight) / 2;
+
+                // End position (inventory location)
+                const endWidth = 60;
+                const endHeight = 45;
+                const endX = invRect.left;
+                const endY = invRect.top;
+
+                // Set initial state
+                this.element.src = dataUrl;
+                this.element.style.width = startWidth + 'px';
+                this.element.style.height = startHeight + 'px';
+                this.element.style.left = startX + 'px';
+                this.element.style.top = startY + 'px';
+                this.element.style.opacity = '1';
+                this.element.style.transform = 'rotate(0deg)';
+                this.element.classList.remove('animating');
+
+                // Force reflow
+                this.element.offsetHeight;
+
+                // Animate to inventory
+                setTimeout(() => {
+                    this.element.classList.add('animating');
+                    this.element.style.width = endWidth + 'px';
+                    this.element.style.height = endHeight + 'px';
+                    this.element.style.left = endX + 'px';
+                    this.element.style.top = endY + 'px';
+                    this.element.style.opacity = '0';
+                    this.element.style.transform = 'rotate(-5deg)';
+
+                    // Pulse inventory
+                    inventory.classList.add('pulse');
+                    setTimeout(() => inventory.classList.remove('pulse'), 300);
+                }, 100);
+
+                // Reset after animation
+                setTimeout(() => {
+                    this.element.classList.remove('animating');
+                    this.element.style.opacity = '0';
+                }, 1000);
+            }
+        };
+
+        // ═══════════════════════════════════════════════════════════════════
+        // THREE.JS SETUP
+        // ═══════════════════════════════════════════════════════════════════
+
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(CONFIG.colors.bg);
+        scene.fog = new THREE.FogExp2(CONFIG.colors.fog, 0.016);
+
+        const camera = new THREE.PerspectiveCamera(
+            CONFIG.camera.fov,
+            window.innerWidth / window.innerHeight,
+            CONFIG.camera.near,
+            CONFIG.camera.far
+        );
+        camera.position.set(0, CONFIG.camera.eyeHeight, 5);
+        camera.rotation.order = 'YXZ';
+
+        const renderer = new THREE.WebGLRenderer({
+            antialias: true,
+            powerPreference: 'high-performance',
+            preserveDrawingBuffer: true
+        });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        renderer.toneMappingExposure = 1.0;
+        document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+        // ═══════════════════════════════════════════════════════════════════
+        // POST-PROCESSING SETUP
+        // ═══════════════════════════════════════════════════════════════════
+
+        let composer, bloomPass;
+
+        function initPostProcessing() {
+            composer = new THREE.EffectComposer(renderer);
+            
+            // Render pass
+            const renderPass = new THREE.RenderPass(scene, camera);
+            composer.addPass(renderPass);
+            
+            // Bloom pass
+            bloomPass = new THREE.UnrealBloomPass(
+                new THREE.Vector2(window.innerWidth, window.innerHeight),
+                CONFIG.postProcessing.bloomStrength,
+                CONFIG.postProcessing.bloomRadius,
+                CONFIG.postProcessing.bloomThreshold
+            );
+            composer.addPass(bloomPass);
+
+            // Custom chromatic aberration + DOF shader
+            const chromaticDofShader = {
+                uniforms: {
+                    tDiffuse: { value: null },
+                    resolution: { value: new THREE.Vector2(window.innerWidth, window.innerHeight) },
+                    chromaticEnabled: { value: CONFIG.postProcessing.chromaticAberration },
+                    chromaticAmount: { value: 0.003 },
+                    focusDistance: { value: CONFIG.postProcessing.dofFocus },
+                    aperture: { value: CONFIG.postProcessing.dofAperture }
+                },
+                vertexShader: `
+                    varying vec2 vUv;
+                    void main() {
+                        vUv = uv;
+                        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                    }
+                `,
+                fragmentShader: `
+                    uniform sampler2D tDiffuse;
+                    uniform vec2 resolution;
+                    uniform bool chromaticEnabled;
+                    uniform float chromaticAmount;
+                    uniform float focusDistance;
+                    uniform float aperture;
+                    varying vec2 vUv;
+                    
+                    void main() {
+                        vec2 uv = vUv;
+                        vec2 center = vec2(0.5);
+                        float dist = distance(uv, center);
+                        
+                        vec4 color;
+                        
+                        if (chromaticEnabled) {
+                            // Chromatic aberration at edges
+                            vec2 dir = (uv - center) * chromaticAmount * dist * 2.0;
+                            color.r = texture2D(tDiffuse, uv + dir).r;
+                            color.g = texture2D(tDiffuse, uv).g;
+                            color.b = texture2D(tDiffuse, uv - dir).b;
+                            color.a = 1.0;
+                        } else {
+                            color = texture2D(tDiffuse, uv);
+                        }
+                        
+                        // Simple DOF blur at edges (simulating shallow depth of field)
+                        float blur = dist * aperture;
+                        vec4 blurred = vec4(0.0);
+                        float total = 0.0;
+                        for (float x = -2.0; x <= 2.0; x += 1.0) {
+                            for (float y = -2.0; y <= 2.0; y += 1.0) {
+                                vec2 offset = vec2(x, y) * blur / resolution;
+                                blurred += texture2D(tDiffuse, uv + offset);
+                                total += 1.0;
+                            }
+                        }
+                        blurred /= total;
+                        
+                        // Mix based on distance from center (focus point)
+                        float dofMix = smoothstep(0.0, 0.5, dist);
+                        color = mix(color, blurred, dofMix * 0.5);
+                        
+                        gl_FragColor = color;
+                    }
+                `
+            };
+
+            const chromaticPass = new THREE.ShaderPass(chromaticDofShader);
+            composer.addPass(chromaticPass);
+            
+            // Store reference for debug panel
+            window.chromaticPass = chromaticPass;
+        }
+
+        // ═══════════════════════════════════════════════════════════════════
+        // LIGHTING
+        // ═══════════════════════════════════════════════════════════════════
+
+        const ambient = new THREE.AmbientLight(0xffffff, 0.4);
+        scene.add(ambient);
+
+        const sun = new THREE.DirectionalLight(0xffffff, 0.8);
+        sun.position.set(30, 80, 30);
+        sun.castShadow = true;
+        sun.shadow.mapSize.set(2048, 2048);
+        sun.shadow.camera.near = 1;
+        sun.shadow.camera.far = 250;
+        sun.shadow.camera.left = -80;
+        sun.shadow.camera.right = 80;
+        sun.shadow.camera.top = 80;
+        sun.shadow.camera.bottom = -80;
+        scene.add(sun);
+
+        const hemi = new THREE.HemisphereLight(0x606080, 0x202020, 0.45);
+        scene.add(hemi);
+
+        const flashLight = new THREE.PointLight(0xffffff, 0, 30);
+        flashLight.position.copy(camera.position);
+        scene.add(flashLight);
+
+        // ═══════════════════════════════════════════════════════════════════
+        // ASSET LOADER
+        // ═══════════════════════════════════════════════════════════════════
+
+        const Assets = {
+            loader: null,
+
+            init() {
+                if (this.loader) return;
+                if (!THREE.GLTFLoader) {
+                    console.warn('GLTFLoader no disponible.');
+                    return;
+                }
+                this.loader = new THREE.GLTFLoader();
+            },
+
+            loadModel(file, { targetSize = 1.2, y = 0, x = 0, z = 0, rotationY = 0 } = {}) {
+                return new Promise((resolve, reject) => {
+                    if (!this.loader) return reject(new Error('Loader not initialized'));
+
+                    const url = CONFIG.assets.basePath + file;
+                    this.loader.load(
+                        url,
+                        (gltf) => {
+                            const root = gltf.scene || gltf.scenes[0];
+                            if (!root) return reject(new Error('GLTF scene missing'));
+
+                            const box = new THREE.Box3().setFromObject(root);
+                            const size = new THREE.Vector3();
+                            box.getSize(size);
+                            const maxDim = Math.max(size.x, size.y, size.z) || 1;
+                            const s = targetSize / maxDim;
+                            root.scale.setScalar(s);
+
+                            const box2 = new THREE.Box3().setFromObject(root);
+                            const size2 = new THREE.Vector3();
+                            box2.getSize(size2);
+
+                            root.position.set(x, y + size2.y * 0.5, z);
+                            root.rotation.y = rotationY;
+
+                            root.traverse((o) => {
+                                if (o.isMesh) {
+                                    o.castShadow = true;
+                                    o.receiveShadow = true;
+                                }
+                            });
+
+                            scene.add(root);
+                            resolve(root);
+                        },
+                        undefined,
+                        (err) => reject(err)
+                    );
+                });
+            }
+        };
+
+        // ═══════════════════════════════════════════════════════════════════
+        // MATERIALS
+        // ═══════════════════════════════════════════════════════════════════
+
+        const Materials = {
+            concrete: null,
+            concreteDark: null,
+            concreteLight: null,
+            floating: null,
+            ceiling: null,
+            
+            createConcreteTexture(size = 512, baseColor = '#1a1a1a', noiseLight = '#252525', noiseDark = '#121212') {
+                const canvas = document.createElement('canvas');
+                canvas.width = canvas.height = size;
+                const ctx = canvas.getContext('2d');
+                
+                ctx.fillStyle = baseColor;
+                ctx.fillRect(0, 0, size, size);
+                
+                for (let i = 0; i < 20000; i++) {
+                    const shade = Math.random() > 0.5 ? noiseLight : noiseDark;
+                    ctx.fillStyle = shade;
+                    ctx.fillRect(
+                        Math.random() * size, 
+                        Math.random() * size, 
+                        1 + Math.random() * 2, 
+                        1 + Math.random() * 2
+                    );
+                }
+                
+                for (let i = 0; i < 25; i++) {
+                    ctx.fillStyle = `rgba(0,0,0,${0.05 + Math.random() * 0.12})`;
+                    ctx.beginPath();
+                    ctx.arc(Math.random() * size, Math.random() * size, 15 + Math.random() * 50, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+                
+                ctx.strokeStyle = noiseDark;
+                ctx.lineWidth = 1;
+                for (let y = 64; y < size; y += 64) {
+                    ctx.beginPath();
+                    ctx.moveTo(0, y + (Math.random() - 0.5) * 3);
+                    ctx.lineTo(size, y + (Math.random() - 0.5) * 3);
+                    ctx.stroke();
+                }
+                
+                ctx.strokeStyle = `rgba(0,0,0,0.1)`;
+                for (let x = 128; x < size; x += 128) {
+                    ctx.beginPath();
+                    ctx.moveTo(x + (Math.random() - 0.5) * 4, 0);
+                    ctx.lineTo(x + (Math.random() - 0.5) * 4, size);
+                    ctx.stroke();
+                }
+                
+                for (let i = 0; i < 100; i++) {
+                    ctx.fillStyle = `rgba(0,0,0,${0.15 + Math.random() * 0.2})`;
+                    ctx.beginPath();
+                    ctx.arc(Math.random() * size, Math.random() * size, 1 + Math.random() * 3, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+
+                return canvas;
+            },
+
+            init() {
+                const mainTex = new THREE.CanvasTexture(
+                    this.createConcreteTexture(512, '#1c1c1c', '#262626', '#141414')
+                );
+                mainTex.wrapS = mainTex.wrapT = THREE.RepeatWrapping;
+                mainTex.repeat.set(2, 2);
+
+                const darkTex = new THREE.CanvasTexture(
+                    this.createConcreteTexture(512, '#131313', '#1a1a1a', '#0d0d0d')
+                );
+                darkTex.wrapS = darkTex.wrapT = THREE.RepeatWrapping;
+                darkTex.repeat.set(2, 2);
+
+                const ceilingTex = new THREE.CanvasTexture(
+                    this.createConcreteTexture(512, '#0e0e0e', '#141414', '#080808')
+                );
+                ceilingTex.wrapS = ceilingTex.wrapT = THREE.RepeatWrapping;
+                ceilingTex.repeat.set(3, 3);
+
+                this.concrete = new THREE.MeshStandardMaterial({
+                    map: mainTex, color: 0x888888, roughness: 0.92, metalness: 0.0
+                });
+
+                this.concreteDark = new THREE.MeshStandardMaterial({
+                    map: darkTex, color: 0x666666, roughness: 0.95, metalness: 0.0
+                });
+
+                this.concreteLight = new THREE.MeshStandardMaterial({
+                    map: mainTex, color: 0x999999, roughness: 0.88, metalness: 0.0
+                });
+
+                this.ceiling = new THREE.MeshStandardMaterial({
+                    map: ceilingTex, color: 0x444444, roughness: 0.98, metalness: 0.0
+                });
+
+                this.floating = new THREE.MeshStandardMaterial({
+                    map: mainTex, color: 0x4a4a4a, roughness: 0.7, metalness: 0.05,
+                    emissive: 0x222222, emissiveIntensity: 0.3
+                });
+            }
+        };
+
+        // ═══════════════════════════════════════════════════════════════════
+        // BRUTALIST ARCHITECTURE GENERATOR
+        // ═══════════════════════════════════════════════════════════════════
+
+        const BrutalistArchitecture = {
+            
+            addColumn(x, z, height = 12, width = 1.2) {
+                const geo = new THREE.BoxGeometry(width, height, width);
+                const col = new THREE.Mesh(geo, Materials.concrete);
+                col.position.set(x, height / 2, z);
+                col.castShadow = true;
+                col.receiveShadow = true;
+                scene.add(col);
+                
+                const capGeo = new THREE.BoxGeometry(width * 1.4, 0.3, width * 1.4);
+                const cap = new THREE.Mesh(capGeo, Materials.concreteDark);
+                cap.position.set(x, height + 0.15, z);
+                cap.castShadow = true;
+                scene.add(cap);
+                
+                return col;
+            },
+            
+            addColumnRow(startX, endX, z, spacing = 6, height = 12) {
+                for (let x = startX; x <= endX; x += spacing) {
+                    this.addColumn(x, z, height);
+                }
+            },
+            
+            addCeiling(x, z, width, depth, height = 8) {
+                const geo = new THREE.BoxGeometry(width, 1.5, depth);
+                const ceiling = new THREE.Mesh(geo, Materials.ceiling);
+                ceiling.position.set(x, height, z);
+                ceiling.receiveShadow = true;
+                scene.add(ceiling);
+                return ceiling;
+            },
+            
+            addBeam(x1, x2, y, z, thickness = 0.8) {
+                const length = Math.abs(x2 - x1);
+                const geo = new THREE.BoxGeometry(length, thickness, thickness);
+                const beam = new THREE.Mesh(geo, Materials.concreteDark);
+                beam.position.set((x1 + x2) / 2, y, z);
+                beam.castShadow = true;
+                beam.receiveShadow = true;
+                scene.add(beam);
+                return beam;
+            },
+            
+            addWallWithOpenings(x, zStart, zEnd, height = 10, side = 1) {
+                const depth = Math.abs(zEnd - zStart);
+                const zCenter = (zStart + zEnd) / 2;
+                
+                const wallGeo = new THREE.BoxGeometry(1.5, height, depth);
+                const wall = new THREE.Mesh(wallGeo, Materials.concrete);
+                wall.position.set(x * side, height / 2, zCenter);
+                wall.castShadow = true;
+                wall.receiveShadow = true;
+                scene.add(wall);
+                
+                const openingCount = Math.floor(depth / 12);
+                for (let i = 0; i < openingCount; i++) {
+                    const oz = zStart + 6 + i * 12;
+                    const openGeo = new THREE.BoxGeometry(2, 3, 2);
+                    const opening = new THREE.Mesh(openGeo, new THREE.MeshBasicMaterial({ color: 0x000000 }));
+                    opening.position.set(x * side, 2, oz);
+                    scene.add(opening);
+                }
+            },
+            
+            addCantilever(x, z, width, depth, height) {
+                const geo = new THREE.BoxGeometry(width, 1, depth);
+                const cant = new THREE.Mesh(geo, Materials.concrete);
+                cant.position.set(x, height, z);
+                cant.castShadow = true;
+                cant.receiveShadow = true;
+                scene.add(cant);
+                
+                const supportGeo = new THREE.BoxGeometry(0.5, height * 0.6, 0.5);
+                const support = new THREE.Mesh(supportGeo, Materials.concreteDark);
+                support.position.set(x, height * 0.3, z);
+                support.castShadow = true;
+                scene.add(support);
+            },
+            
+            addMonumentalStairs(x, zStart, zEnd, startY, endY, width = 8) {
+                const steps = 12;
+                const zStep = (zEnd - zStart) / steps;
+                const yStep = (endY - startY) / steps;
+                
+                for (let i = 0; i < steps; i++) {
+                    const stepGeo = new THREE.BoxGeometry(width, 0.4, Math.abs(zStep) + 0.1);
+                    const step = new THREE.Mesh(stepGeo, Materials.concrete);
+                    step.position.set(x, startY + i * yStep + 0.2, zStart + i * zStep);
+                    step.castShadow = true;
+                    step.receiveShadow = true;
+                    scene.add(step);
+                }
+            },
+            
+            addFluorescentLight(x, z, y = 7.5, length = 4) {
+                const lightGeo = new THREE.BoxGeometry(0.3, 0.1, length);
+                const lightMat = new THREE.MeshBasicMaterial({ color: 0xffffee });
+                const lightMesh = new THREE.Mesh(lightGeo, lightMat);
+                lightMesh.position.set(x, y, z);
+                scene.add(lightMesh);
+                
+                const pointLight = new THREE.PointLight(0xffffdd, 0.9, 18);
+                pointLight.position.set(x, y - 0.5, z);
+                scene.add(pointLight);
+                
+                return { mesh: lightMesh, light: pointLight };
+            },
+            
+            addMonolith(x, z, width = 2, height = 6, depth = 2) {
+                const geo = new THREE.BoxGeometry(width, height, depth);
+                const mono = new THREE.Mesh(geo, Materials.concreteDark);
+                mono.position.set(x, height / 2, z);
+                mono.castShadow = true;
+                mono.receiveShadow = true;
+                scene.add(mono);
+                return mono;
+            }
+        };
+
+        // ═══════════════════════════════════════════════════════════════════
+        // LEVEL
+        // ═══════════════════════════════════════════════════════════════════
+
+        const Level = {
+            puzzles: { bridge: [], arch: [], stairs: [] },
+            doorMesh: null,
+            decorations: [],
+            colliders: [],
+            lights: [],
+            museumPositions: [], // For positional audio
+
+            build() {
+                const BA = BrutalistArchitecture;
+                
+                // ═══════════════════════════════════════════════════════════
+                // ZONA 1: HALL DE ENTRADA
+                // ═══════════════════════════════════════════════════════════
+                
+                this.addPlatform(24, 1, 30, 0, -0.5, -5);
+                this.addCollider(-12, 12, -20, 10);
+                
+                BA.addColumnRow(-10, 10, 8, 5, 10);
+                BA.addColumnRow(-10, 10, -15, 5, 10);
+                BA.addCeiling(0, -5, 28, 35, 10);
+                BA.addWallWithOpenings(13, -20, 10, 10, 1);
+                BA.addWallWithOpenings(13, -20, 10, 10, -1);
+                
+                this.lights.push(BA.addFluorescentLight(-6, 0, 9.5, 6));
+                this.lights.push(BA.addFluorescentLight(6, 0, 9.5, 6));
+                this.lights.push(BA.addFluorescentLight(0, -12, 9.5, 6));
+                
+                BA.addMonolith(-9, -8, 1.5, 4, 1.5);
+                BA.addMonolith(9, -8, 1.5, 4, 1.5);
+                
+                this.addPlatform(20, 1, 35, 0, -0.5, -45);
+                this.addCollider(-10, 10, -62, -28);
+                
+                const b1 = this.floatingPiece(8, 0.4, 10, -10, 5, -25);
+                b1.rotation.set(0.5, 0.35, 0.2);
+                this.puzzles.bridge.push({
+                    mesh: b1,
+                    target: { pos: new THREE.Vector3(0, -0.5, -25), rot: new THREE.Euler(0, 0, 0) }
+                });
+
+                const b2 = this.floatingPiece(8, 0.4, 10, 12, 4, -32);
+                b2.rotation.set(-0.4, -0.3, 0.25);
+                this.puzzles.bridge.push({
+                    mesh: b2,
+                    target: { pos: new THREE.Vector3(0, -0.5, -35), rot: new THREE.Euler(0, 0, 0) }
+                });
+
+                this.addMuseumPedestal(CONFIG.assets.museum[0], 0);
+
+                // ═══════════════════════════════════════════════════════════
+                // ZONA 2: CORREDOR INFINITO
+                // ═══════════════════════════════════════════════════════════
+                
+                this.addPlatform(16, 1, 55, 0, -0.5, -85);
+                this.addCollider(-8, 8, -115, -58);
+                
+                BA.addCeiling(0, -85, 20, 60, 8);
+                this.addPlatform(2, 8, 55, -9, 3.5, -85);
+                this.addPlatform(2, 8, 55, 9, 3.5, -85);
+                
+                for (let z = -65; z > -110; z -= 8) {
+                    BA.addColumn(-7, z, 8, 0.8);
+                    BA.addColumn(7, z, 8, 0.8);
+                }
+                
+                for (let z = -62; z > -108; z -= 10) {
+                    this.lights.push(BA.addFluorescentLight(0, z, 7.5, 5));
+                }
+                
+                for (let z = -60; z > -110; z -= 12) {
+                    BA.addBeam(-8, 8, 7.5, z, 0.6);
+                }
+                
+                const archZ = -108;
+                this.addPlatform(6, 6, 2.5, -7, 2.5, archZ);
+                this.addPlatform(6, 6, 2.5, 7, 2.5, archZ);
+                this.addPlatform(26, 2.5, 2.5, 0, 5.75, archZ);
+
+                this.doorMesh = this.addPlatform(5, 4.5, 1.5, 0, 1.75, archZ);
+                this.doorMesh.material = new THREE.MeshStandardMaterial({
+                    color: 0x080808, roughness: 0.95
+                });
+
+                const a1 = this.floatingPiece(1.5, 5.5, 1.2, -14, 8, -100);
+                a1.rotation.set(0, 0, 0.6);
+                this.puzzles.arch.push({
+                    mesh: a1,
+                    target: { pos: new THREE.Vector3(-3.5, 2.25, archZ), rot: new THREE.Euler(0, 0, 0) }
+                });
+
+                const a2 = this.floatingPiece(1.5, 5.5, 1.2, 14, 7, -98);
+                a2.rotation.set(0.35, 0, -0.55);
+                this.puzzles.arch.push({
+                    mesh: a2,
+                    target: { pos: new THREE.Vector3(3.5, 2.25, archZ), rot: new THREE.Euler(0, 0, 0) }
+                });
+
+                const a3 = this.floatingPiece(9, 1.5, 1.2, 0, 8, -95);
+                a3.rotation.set(0.7, 0.5, 0);
+                this.puzzles.arch.push({
+                    mesh: a3,
+                    target: { pos: new THREE.Vector3(0, 4.75, archZ), rot: new THREE.Euler(0, 0, 0) }
+                });
+
+                this.addMuseumPedestal(CONFIG.assets.museum[1], 0);
+
+                // ═══════════════════════════════════════════════════════════
+                // ZONA 3: ATRIO DE ESCALERAS
+                // ═══════════════════════════════════════════════════════════
+                
+                this.addPlatform(22, 1, 32, 0, -0.5, -126);
+                this.addCollider(-11, 11, -142, -110);
+                
+                BA.addColumn(-9, -118, 16, 1.4);
+                BA.addColumn(9, -118, 16, 1.4);
+                BA.addColumn(-9, -138, 16, 1.4);
+                BA.addColumn(9, -138, 16, 1.4);
+                
+                BA.addCantilever(-6, -125, 6, 4, 6);
+                BA.addCantilever(6, -125, 6, 4, 6);
+                BA.addCantilever(-6, -135, 6, 4, 10);
+                BA.addCantilever(6, -135, 6, 4, 10);
+                
+                BA.addCeiling(0, -128, 26, 32, 16);
+                BA.addBeam(-10, 10, 12, -120);
+                BA.addBeam(-10, 10, 12, -136);
+                
+                this.lights.push(BA.addFluorescentLight(-5, -125, 15, 8));
+                this.lights.push(BA.addFluorescentLight(5, -125, 15, 8));
+                this.lights.push(BA.addFluorescentLight(0, -135, 15, 8));
+
+                for (let i = 0; i < 8; i++) {
+                    const step = this.floatingPiece(
+                        6, 0.7, 4.5,
+                        (Math.random() - 0.5) * 20,
+                        6 + Math.random() * 10,
+                        -140 - i * 5
+                    );
+                    step.rotation.set(
+                        (Math.random() - 0.5) * 0.9,
+                        (Math.random() - 0.5) * 0.9,
+                        (Math.random() - 0.5) * 0.9
+                    );
+                    this.puzzles.stairs.push({
+                        mesh: step,
+                        target: {
+                            pos: new THREE.Vector3(0, i * 0.5 + 0.2, -142 - i * 4),
+                            rot: new THREE.Euler(0, 0, 0)
+                        }
+                    });
+                }
+
+                this.addMuseumPedestal(CONFIG.assets.museum[2], 0);
+
+                // ═══════════════════════════════════════════════════════════
+                // ZONA 4: SALA FINAL
+                // ═══════════════════════════════════════════════════════════
+                
+                const finalZ = -185;
+                const floorY = 3.5;
+
+                this.addPlatform(30, 1, 40, 0, floorY - 0.5, finalZ);
+                this.addCollider(-15, 15, -205, -165, floorY);
+
+                this.addPlatform(1.5, 12, 40, -15, floorY + 5.5, finalZ);
+                this.addPlatform(1.5, 12, 40, 15, floorY + 5.5, finalZ);
+                this.addPlatform(30, 12, 1.5, 0, floorY + 5.5, finalZ - 20);
+                
+                BA.addColumn(-12, finalZ + 15, 12, 1.2);
+                BA.addColumn(12, finalZ + 15, 12, 1.2);
+                BA.addColumn(-12, finalZ - 15, 12, 1.2);
+                BA.addColumn(12, finalZ - 15, 12, 1.2);
+                BA.addColumn(-6, finalZ, 12, 1.0);
+                BA.addColumn(6, finalZ, 12, 1.0);
+                
+                BA.addCeiling(0, finalZ, 34, 44, floorY + 12);
+                
+                BA.addBeam(-14, 14, floorY + 10, finalZ - 10);
+                BA.addBeam(-14, 14, floorY + 10, finalZ);
+                BA.addBeam(-14, 14, floorY + 10, finalZ + 10);
+
+                this.addBirthdayDecor(0, floorY, finalZ);
+
+                const light1 = new THREE.PointLight(CONFIG.colors.accent, 1.5, 35);
+                light1.position.set(0, floorY + 8, finalZ);
+                scene.add(light1);
+
+                const light2 = new THREE.PointLight(0xFF6B6B, 0.7, 22);
+                light2.position.set(-8, floorY + 4, finalZ - 8);
+                scene.add(light2);
+
+                const light3 = new THREE.PointLight(0x4ECDC4, 0.5, 18);
+                light3.position.set(8, floorY + 5, finalZ + 5);
+                scene.add(light3);
+                
+                this.lights.push(BA.addFluorescentLight(-8, finalZ - 10, floorY + 11, 10));
+                this.lights.push(BA.addFluorescentLight(8, finalZ - 10, floorY + 11, 10));
+                this.lights.push(BA.addFluorescentLight(0, finalZ + 10, floorY + 11, 10));
+            },
+
+            addPlatform(w, h, d, x, y, z) {
+                const mesh = new THREE.Mesh(
+                    new THREE.BoxGeometry(w, h, d),
+                    Materials.concrete
+                );
+                mesh.position.set(x, y, z);
+                mesh.castShadow = mesh.receiveShadow = true;
+                scene.add(mesh);
+                return mesh;
+            },
+
+            floatingPiece(w, h, d, x, y, z) {
+                const mesh = new THREE.Mesh(
+                    new THREE.BoxGeometry(w, h, d),
+                    Materials.floating.clone()
+                );
+                mesh.position.set(x, y, z);
+                mesh.castShadow = mesh.receiveShadow = true;
+                scene.add(mesh);
+                return mesh;
+            },
+
+            addPedestal(x, z, yBase = 0, height = 1.05) {
+                const pedestal = new THREE.Mesh(
+                    new THREE.CylinderGeometry(0.7, 0.8, height, 18),
+                    Materials.concreteDark
+                );
+                pedestal.position.set(x, yBase + height / 2, z);
+                pedestal.castShadow = true;
+                pedestal.receiveShadow = true;
+                scene.add(pedestal);
+
+                const plate = new THREE.Mesh(
+                    new THREE.CylinderGeometry(0.78, 0.78, 0.06, 18),
+                    Materials.concreteDark
+                );
+                plate.position.set(x, yBase + height + 0.03, z);
+                plate.receiveShadow = true;
+                scene.add(plate);
+
+                const spot = new THREE.SpotLight(0xffffff, 0.55, 14, Math.PI / 7, 0.4, 1.2);
+                spot.position.set(x, yBase + 4.2, z + 1.2);
+                spot.target.position.set(x, yBase + 1.0, z);
+                spot.castShadow = true;
+                scene.add(spot);
+                scene.add(spot.target);
+
+                return { pedestal, plate, spot };
+            },
+
+            addMuseumPedestal(assetDef, yBase = 0) {
+                const { x, z, file } = assetDef;
+                this.addPedestal(x, z, yBase, 1.05);
+                
+                // Store position for positional audio
+                this.museumPositions.push(new THREE.Vector3(x, yBase + 1.5, z));
+
+                Assets.loadModel(file, { targetSize: 1.25, x, z, y: yBase + 1.12, rotationY: Math.PI * 0.15 })
+                    .catch(() => {
+                        const fallback = new THREE.Mesh(
+                            new THREE.TorusKnotGeometry(0.25, 0.09, 96, 16),
+                            new THREE.MeshStandardMaterial({ color: CONFIG.colors.accent, roughness: 0.35, metalness: 0.5 })
+                        );
+                        fallback.position.set(x, yBase + 1.55, z);
+                        fallback.castShadow = true;
+                        scene.add(fallback);
+                    });
+            },
+
+            addBirthdayDecor(x, y, z) {
+                const table = new THREE.Mesh(
+                    new THREE.CylinderGeometry(1.4, 1.6, 0.7, 22),
+                    Materials.concreteDark
+                );
+                table.position.set(x, y + 0.35, z);
+                table.castShadow = true;
+                table.receiveShadow = true;
+                scene.add(table);
+
+                const plate = new THREE.Mesh(
+                    new THREE.CylinderGeometry(1.25, 1.25, 0.06, 22),
+                    Materials.concreteDark
+                );
+                plate.position.set(x, y + 0.73, z);
+                plate.receiveShadow = true;
+                scene.add(plate);
+
+                Assets.loadModel(CONFIG.assets.finalCake.file, { targetSize: 2.0, x, z, y: y + 0.76, rotationY: Math.PI * 0.25 })
+                    .catch(() => {
+                        const cake = new THREE.Group();
+                        const base = new THREE.Mesh(
+                            new THREE.CylinderGeometry(1.2, 1.3, 0.8, 16),
+                            new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.6 })
+                        );
+                        cake.add(base);
+                        const top = new THREE.Mesh(
+                            new THREE.CylinderGeometry(0.9, 1.1, 0.6, 16),
+                            new THREE.MeshStandardMaterial({ color: 0xFFB6C1, roughness: 0.6 })
+                        );
+                        top.position.y = 0.7;
+                        cake.add(top);
+                        cake.position.set(x, y + 1.2, z);
+                        scene.add(cake);
+                    });
+
+                const colors = [0xF4D03F, 0xFF6B6B, 0x4ECDC4, 0xFFFFFF, 0xFF69B4, 0x9B59B6];
+                for (let i = 0; i < 16; i++) {
+                    const balloon = new THREE.Mesh(
+                        new THREE.SphereGeometry(0.35 + Math.random() * 0.3, 12, 12),
+                        new THREE.MeshStandardMaterial({
+                            color: colors[i % colors.length],
+                            roughness: 0.25, metalness: 0.85
+                        })
+                    );
+                    balloon.position.set(
+                        x + (Math.random() - 0.5) * 18,
+                        y + 3 + Math.random() * 6,
+                        z + (Math.random() - 0.5) * 16
+                    );
+                    this.decorations.push({
+                        mesh: balloon,
+                        type: 'balloon',
+                        offset: Math.random() * Math.PI * 2
+                    });
+                    balloon.castShadow = true;
+                    scene.add(balloon);
+                }
+            },
+
+            addCollider(xMin, xMax, zMin, zMax, yBase = 0) {
+                this.colliders.push({ xMin, xMax, zMin, zMax, yBase });
+            },
+
+            animatePuzzle(key, callback) {
+                const pieces = this.puzzles[key];
+                pieces.forEach((p, i) => {
+                    gsap.to(p.mesh.position, {
+                        x: p.target.pos.x, y: p.target.pos.y, z: p.target.pos.z,
+                        duration: 1.2, delay: i * 0.15, ease: 'power2.out'
+                    });
+                    gsap.to(p.mesh.rotation, {
+                        x: 0, y: 0, z: 0,
+                        duration: 1.2, delay: i * 0.15, ease: 'power2.out',
+                        onComplete: () => {
+                            p.mesh.material = Materials.concreteLight.clone();
+                            p.mesh.material.emissive = new THREE.Color(0x000000);
+                            p.mesh.material.emissiveIntensity = 0;
+                        }
+                    });
+                });
+                if (callback) setTimeout(callback, pieces.length * 150 + 1200);
+            },
+
+            update(time) {
+                this.decorations.forEach(d => {
+                    if (d.type === 'balloon') {
+                        d.mesh.position.y += Math.sin(time * 1.5 + d.offset) * 0.003;
+                    }
+                });
+                
+                this.lights.forEach((l, i) => {
+                    if (l.light && Math.random() < 0.002) {
+                        const originalIntensity = l.light.intensity;
+                        l.light.intensity = 0.1;
+                        setTimeout(() => {
+                            l.light.intensity = originalIntensity;
+                        }, 50 + Math.random() * 100);
+                    }
+                });
+            },
+
+            // Initialize positional audio for museum objects
+            initPositionalAudio() {
+                this.museumPositions.forEach(pos => {
+                    Audio.createCarnivalSource(pos);
+                });
+                
+                // Start birthday music loop for final room
+                Audio.startBirthdayMusic();
+            }
+        };
+
+        // ═══════════════════════════════════════════════════════════════════
+        // INPUT
+        // ═══════════════════════════════════════════════════════════════════
+
+        const Input = {
+            keys: { w: false, a: false, s: false, d: false },
+            mouse: { x: 0, y: 0 },
+
+            init() {
+                document.addEventListener('keydown', e => {
+                    const k = e.key.toLowerCase();
+                    if (k in this.keys) this.keys[k] = true;
+                    if (k === 'g') Gallery.toggle();
+                    if (k === 'escape' && Gallery.isOpen) Gallery.toggle();
+                    if (k === 'p') {
+                        State.debugVisible = !State.debugVisible;
+                        document.getElementById('debug-panel').classList.toggle('visible', State.debugVisible);
+                    }
+                });
+
+                document.addEventListener('keyup', e => {
+                    const k = e.key.toLowerCase();
+                    if (k in this.keys) this.keys[k] = false;
+                });
+
+                document.addEventListener('mousemove', e => {
+                    if (document.pointerLockElement && State.active && !State.paused) {
+                        this.mouse.x = e.movementX;
+                        this.mouse.y = e.movementY;
+                    }
+                });
+
+                document.addEventListener('mousedown', () => {
+                    if (State.active && !State.paused && document.pointerLockElement) {
+                        takePhoto();
+                    }
+                });
+            }
+        };
+
+        // ═══════════════════════════════════════════════════════════════════
+        // DEBUG PANEL BINDINGS
+        // ═══════════════════════════════════════════════════════════════════
+
+        function initDebugPanel() {
+            // Bloom
+            const bloomSlider = document.getElementById('debug-bloom');
+            const bloomVal = document.getElementById('debug-bloom-val');
+            bloomSlider.addEventListener('input', () => {
+                const val = parseFloat(bloomSlider.value);
+                bloomVal.textContent = val.toFixed(1);
+                if (bloomPass) bloomPass.strength = val;
+            });
+
+            // DoF
+            const dofSlider = document.getElementById('debug-dof');
+            const dofVal = document.getElementById('debug-dof-val');
+            dofSlider.addEventListener('input', () => {
+                const val = parseFloat(dofSlider.value);
+                dofVal.textContent = val;
+                if (window.chromaticPass) window.chromaticPass.uniforms.focusDistance.value = val;
+            });
+
+            // Film Grain
+            const grainSlider = document.getElementById('debug-grain');
+            const grainVal = document.getElementById('debug-grain-val');
+            grainSlider.addEventListener('input', () => {
+                const val = parseFloat(grainSlider.value);
+                grainVal.textContent = val.toFixed(2);
+                document.getElementById('film-grain').style.opacity = val;
+            });
+
+            // Chromatic Aberration
+            const chromaticCheck = document.getElementById('debug-chromatic');
+            chromaticCheck.addEventListener('change', () => {
+                if (window.chromaticPass) {
+                    window.chromaticPass.uniforms.chromaticEnabled.value = chromaticCheck.checked;
+                }
+            });
+
+            // Fog
+            const fogSlider = document.getElementById('debug-fog');
+            const fogVal = document.getElementById('debug-fog-val');
+            fogSlider.addEventListener('input', () => {
+                const val = parseFloat(fogSlider.value);
+                fogVal.textContent = val.toFixed(3);
+                scene.fog.density = val;
+            });
+
+            // Ambient Light
+            const ambientSlider = document.getElementById('debug-ambient');
+            const ambientVal = document.getElementById('debug-ambient-val');
+            ambientSlider.addEventListener('input', () => {
+                const val = parseFloat(ambientSlider.value);
+                ambientVal.textContent = val.toFixed(2);
+                ambient.intensity = val;
+            });
+
+            // Wind Volume
+            const windSlider = document.getElementById('debug-wind');
+            const windVal = document.getElementById('debug-wind-val');
+            windSlider.addEventListener('input', () => {
+                const val = parseFloat(windSlider.value);
+                windVal.textContent = val.toFixed(2);
+                Audio.setWindVolume(val);
+            });
+
+            // Carnival Range
+            const carnivalSlider = document.getElementById('debug-carnival');
+            const carnivalVal = document.getElementById('debug-carnival-val');
+            carnivalSlider.addEventListener('input', () => {
+                const val = parseInt(carnivalSlider.value);
+                carnivalVal.textContent = val;
+                CONFIG.audio.carnivalRange = val;
+            });
+
+            // Birthday Volume
+            const birthdaySlider = document.getElementById('debug-birthday');
+            const birthdayVal = document.getElementById('debug-birthday-val');
+            birthdaySlider.addEventListener('input', () => {
+                const val = parseFloat(birthdaySlider.value);
+                birthdayVal.textContent = val.toFixed(2);
+                CONFIG.audio.birthdayVolume = val;
+            });
+
+            // Move Speed
+            const speedSlider = document.getElementById('debug-speed');
+            const speedVal = document.getElementById('debug-speed-val');
+            speedSlider.addEventListener('input', () => {
+                const val = parseFloat(speedSlider.value);
+                speedVal.textContent = val.toFixed(1);
+                CONFIG.gameplay.moveSpeed = val;
+            });
+        }
+
+        // ═══════════════════════════════════════════════════════════════════
+        // MOVEMENT
+        // ═══════════════════════════════════════════════════════════════════
+
+        let headBob = 0;
+
+        function updateMovement(dt) {
+            if (!State.active || State.paused) return;
+
+            camera.rotation.y -= Input.mouse.x * CONFIG.gameplay.mouseSensitivity;
+            camera.rotation.x -= Input.mouse.y * CONFIG.gameplay.mouseSensitivity;
+            camera.rotation.x = Math.max(-1.4, Math.min(1.4, camera.rotation.x));
+            Input.mouse.x = Input.mouse.y = 0;
+
+            const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
+            const right = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
+            forward.y = 0; forward.normalize();
+            right.y = 0; right.normalize();
+
+            const dir = new THREE.Vector3();
+            if (Input.keys.w) dir.add(forward);
+            if (Input.keys.s) dir.sub(forward);
+            if (Input.keys.d) dir.add(right);
+            if (Input.keys.a) dir.sub(right);
+
+            if (dir.length() > 0) {
+                dir.normalize();
+                const speed = CONFIG.gameplay.moveSpeed * dt;
+                const next = camera.position.clone().add(dir.clone().multiplyScalar(speed));
+
+                let canMove = false;
+                let targetY = CONFIG.camera.eyeHeight;
+
+                for (const c of Level.colliders) {
+                    if (next.x >= c.xMin && next.x <= c.xMax &&
+                        next.z >= c.zMin && next.z <= c.zMax) {
+                        canMove = true;
+                        targetY = (c.yBase || 0) + CONFIG.camera.eyeHeight;
+                        break;
+                    }
+                }
+
+                if (State.level >= 3 && next.z < -140 && next.z > -175) {
+                    const progress = Math.max(0, Math.min(1, (-140 - next.z) / 35));
+                    targetY = CONFIG.camera.eyeHeight + progress * 3.5;
+                    canMove = true;
+                }
+
+                if (canMove) {
+                    camera.position.x = next.x;
+                    camera.position.z = next.z;
+                    camera.position.y += (targetY - camera.position.y) * 0.12;
+                    headBob += dt * 14;
+                    camera.position.y += Math.sin(headBob) * 0.02;
+                }
+            }
+
+            flashLight.position.copy(camera.position);
+            
+            // Update positional audio
+            Audio.updatePositionalAudio(camera.position);
+            
+            // Update birthday music if in final zone
+            Audio.updateBirthdayAudio(camera.position);
+        }
+
+        // ═══════════════════════════════════════════════════════════════════
+        // ALIGNMENT
+        // ═══════════════════════════════════════════════════════════════════
+
+        function checkAlignment() {
+            if (!State.active || State.paused) return;
+
+            const dir = new THREE.Vector3();
+            camera.getWorldDirection(dir);
+            const pos = camera.position;
+
+            let aligned = false;
+            let status = 'AF';
+
+            switch (State.level) {
+                case 0:
+                    if (pos.z > -15 && pos.z < 8 && dir.z < -0.92) {
+                        aligned = true;
+                        status = 'LOCK';
+                    }
+                    break;
+                case 1:
+                    if (pos.z < -58 && pos.z > -95 && dir.z < -0.9) {
+                        aligned = true;
+                        status = 'LOCK';
+                    }
+                    break;
+                case 2:
+                    if (pos.z < -112 && pos.z > -140 && dir.z < -0.85 && dir.y > 0.08) {
+                        aligned = true;
+                        status = 'LOCK';
+                    }
+                    break;
+                case 3:
+                    if (pos.z < -168 && pos.y > 3.5 && dir.z < -0.6) {
+                        aligned = true;
+                        status = 'READY';
+                    }
+                    break;
+            }
+
+            const vf = document.getElementById('viewfinder');
+            document.getElementById('af-status').textContent = status;
+
+            if (aligned && !State.isLocked) {
+                State.isLocked = true;
+                vf.classList.add('locked');
+                Audio.play('lock');
+            } else if (!aligned && State.isLocked) {
+                State.isLocked = false;
+                vf.classList.remove('locked');
+            }
+        }
+
+        // ═══════════════════════════════════════════════════════════════════
+        // PHOTO SYSTEM
+        // ═══════════════════════════════════════════════════════════════════
+
+        function takePhoto() {
+            if (!State.canShoot) return;
+            State.canShoot = false;
+            setTimeout(() => State.canShoot = true, CONFIG.gameplay.photoCooldown);
+
+            Audio.play('shutter');
+
+            const flash = document.getElementById('flash-overlay');
+            flash.style.opacity = '0.9';
+            gsap.to(flash, { opacity: 0, duration: 0.4, ease: 'power2.out' });
+
+            flashLight.intensity = 3;
+            gsap.to(flashLight, { intensity: 0, duration: 0.5, ease: 'power2.out' });
+
+            State.shots++;
+            document.getElementById('frame-count').textContent =
+                State.shots.toString().padStart(3, '0');
+            State.energy = Math.min(100, State.energy + CONFIG.gameplay.photoRecharge);
+
+            const names = ['El Puente', 'El Corredor', 'El Atrio', 'La Catedral'];
+            try {
+                // Render without post-processing for clean photo
+                renderer.render(scene, camera);
+                const dataUrl = renderer.domElement.toDataURL('image/jpeg', 0.92);
+                Gallery.add(dataUrl, names[State.level]);
+                
+                // Animate photo capture
+                PhotoCapture.animate(dataUrl);
+            } catch (e) {
+                console.error('Error capturing photo:', e);
+            }
+
+            if (State.isLocked) solvePuzzle();
+        }
+
+        function solvePuzzle() {
+            Audio.play('solve');
+
+            const dot = document.getElementById(`dot-${State.level}`);
+            const line = document.getElementById(`line-${State.level}`);
+            if (dot) {
+                dot.classList.remove('current');
+                dot.classList.add('completed');
+            }
+            if (line) line.classList.add('active');
+
+            switch (State.level) {
+                case 0:
+                    Level.animatePuzzle('bridge', () => {
+                        Level.addCollider(-10, 10, -42, -18);
+                    });
+                    State.level = 1;
+                    break;
+                case 1:
+                    Level.animatePuzzle('arch');
+                    gsap.to(Level.doorMesh.position, { y: -5, duration: 2, delay: 0.8 });
+                    State.level = 2;
+                    break;
+                case 2:
+                    Level.animatePuzzle('stairs');
+                    State.level = 3;
+                    break;
+                case 3:
+                    setTimeout(() => {
+                        State.active = false;
+                        if (document.pointerLockElement) document.exitPointerLock();
+
+                        const elapsed = Math.floor((Date.now() - State.startTime) / 1000);
+                        const mins = Math.floor(elapsed / 60);
+                        const secs = elapsed % 60;
+
+                        document.getElementById('final-photos').textContent = State.shots;
+                        document.getElementById('final-time').textContent = `${mins}:${secs.toString().padStart(2, '0')}`;
+
+                        document.getElementById('win-screen').style.display = 'flex';
+                        
+                        // Intensify the birthday music for the win screen
+                        Audio.intensifyBirthday();
+                    }, 500);
+                    break;
+            }
+
+            const nextDot = document.getElementById(`dot-${State.level}`);
+            if (nextDot) nextDot.classList.add('current');
+        }
+
+        // ═══════════════════════════════════════════════════════════════════
+        // UI UPDATE
+        // ═══════════════════════════════════════════════════════════════════
+
+        function updateUI(dt) {
+            State.energy -= CONFIG.gameplay.energyDrain * dt;
+            State.energy = Math.max(0, State.energy);
+
+            const fill = document.getElementById('battery-fill');
+            const text = document.getElementById('battery-text');
+            fill.style.width = `${State.energy}%`;
+            text.textContent = `${Math.round(State.energy)}%`;
+
+            fill.classList.remove('warning', 'critical');
+            if (State.energy < 15) fill.classList.add('critical');
+            else if (State.energy < 35) fill.classList.add('warning');
+
+            if (State.energy <= 0) {
+                State.active = false;
+                if (document.pointerLockElement) document.exitPointerLock();
+                document.getElementById('death-screen').style.display = 'flex';
+            }
+        }
+
+        // ═══════════════════════════════════════════════════════════════════
+        // MAIN LOOP
+        // ═══════════════════════════════════════════════════════════════════
+
+        const clock = new THREE.Clock();
+        let grainFrame = 0;
+
+        function animate() {
+            requestAnimationFrame(animate);
+            const dt = Math.min(clock.getDelta(), 0.1);
+            const time = clock.getElapsedTime();
+
+            if (State.active && !State.paused) {
+                updateMovement(dt);
+                checkAlignment();
+                updateUI(dt);
+                Level.update(time);
+            }
+
+            // Update film grain every few frames for performance
+            grainFrame++;
+            if (grainFrame % 3 === 0) {
+                FilmGrain.update();
+            }
+
+            // Use composer for post-processing
+            if (composer) {
+                composer.render();
+            } else {
+                renderer.render(scene, camera);
+            }
+        }
+
+        // ═══════════════════════════════════════════════════════════════════
+        // INITIALIZATION
+        // ═══════════════════════════════════════════════════════════════════
+
+        function init() {
+            Assets.init();
+            Materials.init();
+            Level.build();
+            Input.init();
+            FilmGrain.init();
+            PhotoCapture.init();
+            initPostProcessing();
+            initDebugPanel();
+
+            window.addEventListener('resize', () => {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+                if (composer) composer.setSize(window.innerWidth, window.innerHeight);
+                FilmGrain.resize();
+            });
+
+            document.addEventListener('pointerlockchange', () => {
+                if (!document.pointerLockElement && State.active && !Gallery.isOpen) {
+                    State.paused = true;
+                }
+            });
+
+            State.initialized = true;
+        }
+
+        // Start button
+        document.getElementById('btn-start').addEventListener('click', () => {
+            Audio.init();
+            if (!State.initialized) init();
+            
+            // Initialize positional audio for museum objects
+            Level.initPositionalAudio();
+
+            document.getElementById('start-screen').style.display = 'none';
+            document.getElementById('ui-layer').classList.add('visible');
+            document.body.requestPointerLock();
+            State.active = true;
+            State.paused = false;
+            State.startTime = Date.now();
+            document.getElementById('dot-0').classList.add('current');
+            animate();
+        });
+
+        // Gallery button on win screen
+        document.getElementById('btn-gallery-win').addEventListener('click', () => {
+            Gallery.toggle();
+        });
+
+        // Gallery close button
+        document.getElementById('gallery-close').addEventListener('click', () => {
+            Gallery.toggle();
+        });
+
+        // Pre-render
+        renderer.render(scene, camera);
+    </script>
+</body>
+</html>
